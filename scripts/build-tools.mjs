@@ -31,8 +31,89 @@ const runtimeExternalPackages = new Set([
 const runtimeExternalPatterns = Array.from(runtimeExternalPackages)
   .flatMap(packageName => [packageName, `${packageName}/*`]);
 
+const commonPruneDirectoryNames = new Set([
+  '.github',
+  '.vscode',
+  '.nyc_output',
+  'benchmark',
+  'benchmarks',
+  'coverage',
+  'doc',
+  'docs',
+  'example',
+  'examples',
+  'test',
+  'tests'
+]);
+
+const commonPruneFileNames = new Set([
+  '.editorconfig',
+  '.eslintignore',
+  '.eslintrc',
+  '.eslintrc.js',
+  '.eslintrc.json',
+  '.gitignore',
+  '.npmignore',
+  '.nycrc',
+  '.nycrc.json',
+  '.prettierrc',
+  '.prettierrc.json',
+  'binding.gyp',
+  'codecov.yml',
+  'package-lock.json',
+  'tsconfig.json',
+  'tsconfig-build.json'
+]);
+
+const commonPruneFileExtensions = new Set([
+  '.c',
+  '.cc',
+  '.cpp',
+  '.d.ts',
+  '.exp',
+  '.filters',
+  '.gyp',
+  '.h',
+  '.hpp',
+  '.iobj',
+  '.ipdb',
+  '.lib',
+  '.m',
+  '.map',
+  '.md',
+  '.mm',
+  '.pdb',
+  '.sln',
+  '.ts',
+  '.vcxproj',
+  '.yaml',
+  '.yml'
+]);
+
+const installOnlyPackages = [
+  '@abandonware/node-addon-api',
+  '@types',
+  'napi-thread-safe-callback',
+  'node-addon-api'
+];
+
 function toDisplayPath(filePath) {
   return path.relative(rootDir, filePath).replace(/\\/g, '/');
+}
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+
+  const digits = value >= 10 || unitIndex === 0 ? 0 : 1;
+  return `${value.toFixed(digits)} ${units[unitIndex]}`;
 }
 
 async function pathExists(filePath) {
@@ -208,6 +289,218 @@ function runCommand(command, args, options = {}) {
   });
 }
 
+async function directorySize(dir) {
+  if (!(await pathExists(dir))) return 0;
+
+  let size = 0;
+  const entries = await readdir(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const entryPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      size += await directorySize(entryPath);
+    } else if (entry.isFile()) {
+      size += (await stat(entryPath)).size;
+    }
+  }
+
+  return size;
+}
+
+async function removeWithin(root, target) {
+  assertWithin(root, target);
+  await rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+}
+
+function packagePath(nodeModulesDir, packageName) {
+  return path.join(nodeModulesDir, ...packageName.split('/'));
+}
+
+function isLicenseFile(fileName) {
+  const lowerName = fileName.toLowerCase();
+  return (
+    lowerName === 'license' ||
+    lowerName.startsWith('license.') ||
+    lowerName === 'copying' ||
+    lowerName.startsWith('copying.') ||
+    lowerName === 'notice' ||
+    lowerName.startsWith('notice.')
+  );
+}
+
+function shouldPruneCommonFile(fileName) {
+  if (isLicenseFile(fileName)) return false;
+
+  const lowerName = fileName.toLowerCase();
+  if (commonPruneFileNames.has(lowerName)) return true;
+  if (lowerName.startsWith('readme')) return true;
+  if (lowerName.startsWith('changelog')) return true;
+  if (lowerName.startsWith('tsconfig')) return true;
+
+  return commonPruneFileExtensions.has(path.extname(lowerName));
+}
+
+async function pruneCommonFiles(dir, root) {
+  if (!(await pathExists(dir))) return;
+
+  const entries = await readdir(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const entryPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (commonPruneDirectoryNames.has(entry.name.toLowerCase())) {
+        await removeWithin(root, entryPath);
+        continue;
+      }
+
+      await pruneCommonFiles(entryPath, root);
+      continue;
+    }
+
+    if (entry.isFile() && shouldPruneCommonFile(entry.name)) {
+      await removeWithin(root, entryPath);
+    }
+  }
+}
+
+function isCurrentPrebuildDir(dirName) {
+  const [platform, archPart = ''] = dirName.split('-', 2);
+  if (platform !== process.platform) return false;
+  return archPart.split('+').includes(process.arch);
+}
+
+async function prunePrebuildDirectories(dir, root) {
+  if (!(await pathExists(dir))) return;
+
+  const entries = await readdir(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const entryPath = path.join(dir, entry.name);
+    if (!entry.isDirectory()) continue;
+
+    if (entry.name === 'prebuilds') {
+      const prebuilds = await readdir(entryPath, { withFileTypes: true });
+      for (const prebuild of prebuilds) {
+        if (prebuild.isDirectory() && !isCurrentPrebuildDir(prebuild.name)) {
+          await removeWithin(root, path.join(entryPath, prebuild.name));
+        }
+      }
+      continue;
+    }
+
+    await prunePrebuildDirectories(entryPath, root);
+  }
+}
+
+async function removePackagesFromNodeModulesDirs(dir, root, packageNames) {
+  if (!(await pathExists(dir))) return;
+
+  const entries = await readdir(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const entryPath = path.join(dir, entry.name);
+    if (!entry.isDirectory()) continue;
+
+    if (entry.name === 'node_modules') {
+      for (const packageName of packageNames) {
+        await removeWithin(root, packagePath(entryPath, packageName));
+      }
+    }
+
+    await removePackagesFromNodeModulesDirs(entryPath, root, packageNames);
+  }
+}
+
+async function removeEmptyDirectories(dir, root) {
+  if (!(await pathExists(dir))) return;
+
+  const entries = await readdir(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const entryPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      await removeEmptyDirectories(entryPath, root);
+    }
+  }
+
+  if (dir === root) return;
+
+  const remaining = await readdir(dir);
+  if (!remaining.length) {
+    await removeWithin(root, dir);
+  }
+}
+
+async function keepOnlyFiles(dir, root, keepNames) {
+  if (!(await pathExists(dir))) return;
+
+  const entries = await readdir(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isFile() || !keepNames.has(entry.name)) {
+      await removeWithin(root, path.join(dir, entry.name));
+    }
+  }
+}
+
+async function pruneNoble(nodeModulesDir, root) {
+  const nobleDir = packagePath(nodeModulesDir, '@abandonware/noble');
+  if (!(await pathExists(nobleDir))) return;
+
+  await removeWithin(root, path.join(nobleDir, 'assets'));
+  await removeWithin(root, path.join(nobleDir, 'build', 'lib'));
+  await removeWithin(root, path.join(nobleDir, 'build', 'config.gypi'));
+  await removeWithin(root, path.join(nobleDir, 'lib', 'mac', 'src'));
+  await removeWithin(root, path.join(nobleDir, 'lib', 'win', 'src'));
+  await removeWithin(root, path.join(nobleDir, 'test.custom.js'));
+  await removeWithin(root, path.join(nobleDir, 'test.js'));
+  await removeWithin(root, path.join(nobleDir, 'with-bindings.js'));
+  await removeWithin(root, path.join(nobleDir, 'ws-slave.js'));
+
+  if (process.platform === 'win32') {
+    for (const relativePath of [
+      ['lib', 'distributed'],
+      ['lib', 'hci-socket'],
+      ['lib', 'mac'],
+      ['lib', 'webbluetooth'],
+      ['lib', 'websocket'],
+      ['lib', 'resolve-bindings-web.js']
+    ]) {
+      await removeWithin(root, path.join(nobleDir, ...relativePath));
+    }
+
+    await keepOnlyFiles(
+      path.join(nobleDir, 'build', 'Release'),
+      root,
+      new Set(['binding.node'])
+    );
+  }
+}
+
+async function pruneSerialportBindings(nodeModulesDir, root) {
+  const bindingsDir = packagePath(nodeModulesDir, '@serialport/bindings-cpp');
+  if (!(await pathExists(bindingsDir))) return;
+
+  await removeWithin(root, path.join(bindingsDir, 'src'));
+  await removeWithin(root, path.join(bindingsDir, 'build'));
+  await prunePrebuildDirectories(bindingsDir, root);
+}
+
+async function minimizeRuntimeDependencies(packageDir) {
+  const nodeModulesDir = path.join(packageDir, 'node_modules');
+  if (!(await pathExists(nodeModulesDir))) return;
+
+  const beforeBytes = await directorySize(nodeModulesDir);
+
+  await removeWithin(packageDir, path.join(packageDir, 'package-lock.json'));
+  await removeWithin(packageDir, path.join(nodeModulesDir, '.package-lock.json'));
+  await removePackagesFromNodeModulesDirs(packageDir, packageDir, installOnlyPackages);
+  await pruneNoble(nodeModulesDir, packageDir);
+  await pruneSerialportBindings(nodeModulesDir, packageDir);
+  await prunePrebuildDirectories(nodeModulesDir, packageDir);
+  await pruneCommonFiles(nodeModulesDir, packageDir);
+  await removeEmptyDirectories(nodeModulesDir, packageDir);
+
+  const afterBytes = await directorySize(nodeModulesDir);
+  if (beforeBytes !== afterBytes) {
+    console.log(`  minimized runtime dependencies: ${formatBytes(beforeBytes)} -> ${formatBytes(afterBytes)}`);
+  }
+}
+
 async function copyRuntimeAssets(project, distDir, warnings) {
   for (const dirName of assetDirs) {
     const source = path.join(project.dir, dirName);
@@ -243,9 +536,10 @@ async function installRuntimeDependencies(project, packageDir) {
   console.log(`  installing runtime dependencies in ${toDisplayPath(packageDir)}`);
   await runCommand(
     npmCommand,
-    ['install', '--omit=dev', '--no-audit', '--no-fund'],
+    ['install', '--omit=dev', '--omit=optional', '--no-audit', '--no-fund'],
     { cwd: packageDir }
   );
+  await minimizeRuntimeDependencies(packageDir);
 }
 
 async function buildProject(project) {
@@ -277,7 +571,8 @@ async function buildProject(project) {
     target: nodeTarget,
     external: [...builtinExternals, ...runtimeExternalPatterns],
     legalComments: 'none',
-    sourcemap: true,
+    minify: true,
+    sourcemap: false,
     logLevel: 'silent'
   });
 
