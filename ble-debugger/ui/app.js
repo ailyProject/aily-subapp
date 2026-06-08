@@ -46,16 +46,14 @@ const state = {
   backendStatus: 'connecting',
   adapterState: 'unknown',
   backendPid: 0,
+  activeTab: 'scan',
   scanning: false,
   allowDuplicates: true,
   serviceFilter: '',
   devices: [],
   selectedDeviceId: '',
-  connectedDeviceId: '',
+  connectedDevices: [],
   connectingDeviceId: '',
-  services: [],
-  selectedServiceUuid: '',
-  selectedCharacteristicUuid: '',
   payloadMode: 'hex',
   payload: '01 02 03 04',
   writeWithoutResponse: false,
@@ -164,7 +162,7 @@ function connectHost() {
       beforeClose() {
         return {
           canClose: true,
-          connected: !!state.connectedDeviceId,
+          connected: state.connectedDevices.length > 0,
           scanning: state.scanning
         };
       }
@@ -198,6 +196,7 @@ function notifyHostReady() {
     wsConnected: !!ws && ws.readyState === WebSocket.OPEN,
     adapterState: state.adapterState,
     backendStatus: state.backendStatus,
+    connectedCount: state.connectedDevices.length,
     pid: state.backendPid
   });
 }
@@ -238,26 +237,6 @@ function logLabel(label) {
   return key ? t(key, label) : label;
 }
 
-function statusLabel() {
-  if (state.backendStatus === 'ready') return t('BACKEND_READY', 'Backend ready');
-  if (state.backendStatus === 'error') return t('BACKEND_ERROR', 'Backend error');
-  if (state.backendStatus === 'closed') return t('BACKEND_CLOSED', 'Backend closed');
-  return t('BACKEND_STARTING', 'Connecting backend');
-}
-
-function adapterLabel() {
-  const labels = {
-    poweredOn: ['ADAPTER_POWEREDON', 'Bluetooth powered on'],
-    poweredOff: ['ADAPTER_POWEREDOFF', 'Bluetooth powered off'],
-    unauthorized: ['ADAPTER_UNAUTHORIZED', 'Bluetooth unauthorized'],
-    unsupported: ['ADAPTER_UNSUPPORTED', 'Bluetooth unsupported'],
-    resetting: ['ADAPTER_RESETTING', 'Bluetooth resetting'],
-    unknown: ['ADAPTER_UNKNOWN', 'Bluetooth unknown']
-  };
-  const label = labels[state.adapterState] || ['ADAPTER_UNKNOWN', `Bluetooth ${state.adapterState}`];
-  return t(label[0], label[1]);
-}
-
 function rssiClass(device) {
   if (device.rssi === null || device.rssi === undefined) return 'weak';
   if (device.rssi >= -60) return 'strong';
@@ -281,15 +260,41 @@ function canNotify(characteristic) {
   return hasProperty(characteristic, 'notify') || hasProperty(characteristic, 'indicate');
 }
 
-function selectedDevice() {
-  return state.devices.find(device => device.id === state.selectedDeviceId || device.id === state.connectedDeviceId);
+function deviceTabId(deviceId) {
+  return `device:${deviceId}`;
 }
 
-function selectedCharacteristic() {
-  for (const service of state.services) {
+function activeDeviceId() {
+  return state.activeTab.startsWith('device:') ? state.activeTab.slice('device:'.length) : '';
+}
+
+function connectionById(deviceId) {
+  return state.connectedDevices.find(connection => connection.id === deviceId) || null;
+}
+
+function activeConnection() {
+  return connectionById(activeDeviceId());
+}
+
+function isConnected(deviceId) {
+  return !!connectionById(deviceId);
+}
+
+function deviceLabel(device) {
+  return device?.name || t('UNKNOWN', 'Unknown');
+}
+
+function deviceLogDetail(device) {
+  if (!device) return '';
+  return `${deviceLabel(device)} (${device.address || device.id})`;
+}
+
+function selectedCharacteristic(connection = activeConnection()) {
+  if (!connection) return null;
+  for (const service of connection.services) {
     const match = service.characteristics.find(characteristic =>
-      characteristic.uuid === state.selectedCharacteristicUuid &&
-      service.uuid === state.selectedServiceUuid
+      characteristic.uuid === connection.selectedCharacteristicUuid &&
+      service.uuid === connection.selectedServiceUuid
     );
     if (match) return match;
   }
@@ -316,7 +321,7 @@ function renderDevices() {
 
   return state.devices.map(device => {
     const active = state.selectedDeviceId === device.id ? ' active' : '';
-    const connected = state.connectedDeviceId === device.id ? ' connected' : '';
+    const connected = isConnected(device.id) ? ' connected' : '';
     const connecting = state.connectingDeviceId === device.id;
     return `
       <div class="device-row${active}${connected}" data-action="select-device" data-id="${escapeAttr(device.id)}">
@@ -325,7 +330,7 @@ function renderDevices() {
           <strong>${escapeHtml(device.name || t('UNKNOWN', 'Unknown'))}</strong>
           <span class="mono">${escapeHtml(device.address || device.id)}</span>
         </span>
-        <button type="button" class="device-action" data-action="connect-device" data-id="${escapeAttr(device.id)}" ${connecting || state.connectedDeviceId === device.id ? 'disabled' : ''} title="${attrText('CONNECT', 'Connect')}">
+        <button type="button" class="device-action" data-action="connect-device" data-id="${escapeAttr(device.id)}" ${connecting || isConnected(device.id) ? 'disabled' : ''} title="${attrText('CONNECT', 'Connect')}">
           ${connecting ? '...' : '>'}
         </button>
       </div>
@@ -333,19 +338,19 @@ function renderDevices() {
   }).join('');
 }
 
-function renderGatt() {
-  if (!state.services.length) {
+function renderGatt(connection) {
+  if (!connection?.services?.length) {
     return `<div class="empty-state">${text('GATT_EMPTY', 'No GATT database loaded')}</div>`;
   }
 
-  return state.services.map(service => `
+  return connection.services.map(service => `
     <div class="service-block">
       <div class="service-title">
         <span>${text('SERVICE', 'Service')}</span>
         <span class="mono">${escapeHtml(service.uuid)}</span>
       </div>
       ${service.characteristics.map(characteristic => {
-        const active = state.selectedServiceUuid === service.uuid && state.selectedCharacteristicUuid === characteristic.uuid ? ' active' : '';
+        const active = connection.selectedServiceUuid === service.uuid && connection.selectedCharacteristicUuid === characteristic.uuid ? ' active' : '';
         return `
           <button type="button" class="characteristic-row${active}" data-action="select-characteristic" data-service="${escapeAttr(service.uuid)}" data-characteristic="${escapeAttr(characteristic.uuid)}">
             <span class="mono">${escapeHtml(characteristic.uuid)}</span>
@@ -359,8 +364,8 @@ function renderGatt() {
   `).join('');
 }
 
-function renderOperation() {
-  const characteristic = selectedCharacteristic();
+function renderOperation(connection) {
+  const characteristic = selectedCharacteristic(connection);
   if (!characteristic) {
     return `<div class="empty-state">${text('NO_CHARACTERISTIC', 'Select a characteristic')}</div>`;
   }
@@ -424,25 +429,46 @@ function renderLogs() {
   `).join('');
 }
 
-function render() {
-  const backendClass = state.backendStatus === 'ready' ? 'ready' : state.backendStatus === 'error' ? 'error' : '';
-  const adapterClass = state.adapterState === 'poweredOn' ? 'ready' : 'error';
-  const connected = selectedDevice();
+function renderTabs() {
+  const activeScan = state.activeTab === 'scan' ? ' active' : '';
 
-  app.className = `ble-debugger ${state.backendStatus === 'connecting' ? 'loading' : ''} ${state.backendStatus === 'error' ? 'failed' : ''}`;
-  app.innerHTML = `
-    <div class="topbar">
-      <div class="status-strip">
-        <span class="status ${backendClass}">${escapeHtml(statusLabel())}</span>
-        <span class="status ${adapterClass}">${escapeHtml(adapterLabel())}</span>
-        ${state.backendPid ? `<span class="pid mono">PID ${escapeHtml(state.backendPid)}</span>` : ''}
-      </div>
-      <div class="actions">
-        <button type="button" data-action="reconnect" ${state.backendStatus === 'connecting' ? 'disabled' : ''}>${text('RECONNECT_UI', 'Reconnect UI')}</button>
-      </div>
+  return `
+    <div class="tabbar" role="tablist">
+      <button type="button" class="tab-button${activeScan}" data-action="switch-tab" data-tab="scan" role="tab" aria-selected="${state.activeTab === 'scan'}">
+        <span class="tab-label">${text('SCAN', 'Scan')}</span>
+      </button>
+      ${state.connectedDevices.map(connection => {
+        const tabId = deviceTabId(connection.id);
+        const activeDevice = state.activeTab === tabId ? ' active' : '';
+        const connectedLabel = deviceLabel(connection.device);
+        return `
+        <div class="tab-item${activeDevice}" role="presentation">
+          <button type="button" class="tab-button device-tab-button" data-action="switch-tab" data-tab="device" data-id="${escapeAttr(connection.id)}" role="tab" aria-selected="${state.activeTab === tabId}" title="${escapeAttr(connectedLabel)}">
+            <span class="tab-label">${escapeHtml(connectedLabel)}</span>
+          </button>
+          <button type="button" class="tab-close" data-action="disconnect" data-id="${escapeAttr(connection.id)}" title="${attrText('DISCONNECT', 'Disconnect')}">x</button>
+        </div>
+      `;
+      }).join('')}
     </div>
+  `;
+}
 
-    <div class="workspace-grid">
+function renderLogPanel() {
+  return `
+    <section class="panel log-panel">
+      <div class="panel-title">
+        <span>${text('LOG', 'Log')}</span>
+        <button type="button" class="icon-action" data-action="clear-logs" title="${attrText('CLEAR_LOGS', 'Clear logs')}">x</button>
+      </div>
+      <div class="log-list">${renderLogs()}</div>
+    </section>
+  `;
+}
+
+function renderScanTab() {
+  return `
+    <div class="tab-page scan-page" role="tabpanel">
       <section class="panel scan-panel">
         <div class="panel-title">
           <span>${text('SCAN', 'Scan')}</span>
@@ -459,42 +485,55 @@ function render() {
           </label>
         </div>
         <div class="actions">
-          <button type="button" class="primary" data-action="start-scan" ${state.scanning || state.backendStatus !== 'ready' ? 'disabled' : ''}>${text('START_SCAN', 'Start scan')}</button>
-          <button type="button" data-action="stop-scan" ${state.scanning ? '' : 'disabled'}>${text('STOP_SCAN', 'Stop')}</button>
+          <button type="button" class="primary" data-action="toggle-scan" ${!state.scanning && state.backendStatus !== 'ready' ? 'disabled' : ''}>${state.scanning ? text('STOP_SCAN', 'Stop scan') : text('START_SCAN', 'Start scan')}</button>
         </div>
         <div class="device-list">${renderDevices()}</div>
       </section>
+      ${renderLogPanel()}
+    </div>
+  `;
+}
 
+function renderDeviceTab(connection) {
+  const connected = connection?.device;
+  return `
+    <div class="tab-page device-page" role="tabpanel">
       <section class="panel gatt-panel">
         <div class="panel-title">
           <span>${text('GATT', 'GATT')}</span>
           <div class="title-actions">
-            <button type="button" class="icon-action" data-action="refresh-gatt" ${state.connectedDeviceId ? '' : 'disabled'} title="${attrText('REFRESH', 'Refresh')}">r</button>
-            <button type="button" class="icon-action" data-action="disconnect" ${state.connectedDeviceId ? '' : 'disabled'} title="${attrText('DISCONNECT', 'Disconnect')}">-</button>
+            <button type="button" class="icon-action" data-action="refresh-gatt" data-id="${escapeAttr(connection?.id || '')}" ${connection ? '' : 'disabled'} title="${attrText('REFRESH', 'Refresh')}">r</button>
+            <button type="button" class="icon-action" data-action="disconnect" data-id="${escapeAttr(connection?.id || '')}" ${connection ? '' : 'disabled'} title="${attrText('DISCONNECT', 'Disconnect')}">-</button>
           </div>
         </div>
         <div class="connected-device">
-          ${state.connectedDeviceId && connected ? `
-            <strong>${escapeHtml(connected.name || t('UNKNOWN', 'Unknown'))}</strong>
+          ${connected ? `
+            <strong>${escapeHtml(deviceLabel(connected))}</strong>
             <span class="mono">${escapeHtml(connected.address || connected.id)}</span>
           ` : `<span>${text('NO_DEVICE', 'No device connected')}</span>`}
         </div>
-        <div class="gatt-list">${renderGatt()}</div>
+        <div class="gatt-list">${renderGatt(connection)}</div>
       </section>
 
       <section class="panel operation-panel">
         <div class="panel-title">${text('OPERATION', 'Operation')}</div>
-        ${renderOperation()}
+        ${renderOperation(connection)}
       </section>
-
-      <section class="panel log-panel">
-        <div class="panel-title">
-          <span>${text('LOG', 'Log')}</span>
-          <button type="button" class="icon-action" data-action="clear-logs" title="${attrText('CLEAR_LOGS', 'Clear logs')}">x</button>
-        </div>
-        <div class="log-list">${renderLogs()}</div>
-      </section>
+      ${renderLogPanel()}
     </div>
+  `;
+}
+
+function render() {
+  const connection = activeConnection();
+  if (state.activeTab !== 'scan' && !connection) {
+    state.activeTab = 'scan';
+  }
+
+  app.className = `ble-debugger ${state.backendStatus === 'connecting' ? 'loading' : ''} ${state.backendStatus === 'error' ? 'failed' : ''}`;
+  app.innerHTML = `
+    ${renderTabs()}
+    ${state.activeTab !== 'scan' ? renderDeviceTab(activeConnection()) : renderScanTab()}
 
     <div class="overlay">${state.backendStatus === 'error' ? text('UI_FAILED', 'BLE debugger backend connection failed') : text('UI_CONNECTING', 'Connecting BLE debugger...')}</div>
   `;
@@ -531,23 +570,69 @@ function parseServiceFilter() {
   return tokens;
 }
 
-function selectFirstCharacteristic() {
-  const firstService = state.services[0];
+function selectFirstCharacteristic(connection) {
+  if (!connection) return;
+  const firstService = connection.services[0];
   const firstCharacteristic = firstService?.characteristics?.[0];
   if (!firstService || !firstCharacteristic) {
-    state.selectedServiceUuid = '';
-    state.selectedCharacteristicUuid = '';
+    connection.selectedServiceUuid = '';
+    connection.selectedCharacteristicUuid = '';
     return;
   }
 
-  const stillExists = state.services.some(service =>
-    service.uuid === state.selectedServiceUuid &&
-    service.characteristics.some(characteristic => characteristic.uuid === state.selectedCharacteristicUuid)
+  const stillExists = connection.services.some(service =>
+    service.uuid === connection.selectedServiceUuid &&
+    service.characteristics.some(characteristic => characteristic.uuid === connection.selectedCharacteristicUuid)
   );
 
   if (!stillExists) {
-    state.selectedServiceUuid = firstService.uuid;
-    state.selectedCharacteristicUuid = firstCharacteristic.uuid;
+    connection.selectedServiceUuid = firstService.uuid;
+    connection.selectedCharacteristicUuid = firstCharacteristic.uuid;
+  }
+}
+
+function upsertConnection(device, services = []) {
+  if (!device?.id) return null;
+  let connection = connectionById(device.id);
+  if (!connection) {
+    connection = {
+      id: device.id,
+      device,
+      services: [],
+      selectedServiceUuid: '',
+      selectedCharacteristicUuid: ''
+    };
+    state.connectedDevices.push(connection);
+  } else {
+    connection.device = { ...connection.device, ...device };
+  }
+
+  if (Array.isArray(services)) {
+    connection.services = services;
+    selectFirstCharacteristic(connection);
+  }
+
+  return connection;
+}
+
+function removeConnection(deviceId) {
+  if (!deviceId) return;
+  state.connectedDevices = state.connectedDevices.filter(connection => connection.id !== deviceId);
+  if (state.activeTab === deviceTabId(deviceId)) {
+    state.activeTab = 'scan';
+  }
+  if (state.selectedDeviceId === deviceId) {
+    state.selectedDeviceId = '';
+  }
+}
+
+function hydrateConnections(items = []) {
+  state.connectedDevices = [];
+  for (const item of items) {
+    upsertConnection(item.device, item.services || []);
+  }
+  if (state.activeTab !== 'scan' && !activeConnection()) {
+    state.activeTab = state.connectedDevices[0] ? deviceTabId(state.connectedDevices[0].id) : 'scan';
   }
 }
 
@@ -563,11 +648,19 @@ function upsertDevice(device) {
   state.devices = [...state.devices]
     .sort((a, b) => (b.rssi ?? -999) - (a.rssi ?? -999))
     .slice(0, 120);
+
+  const connection = connectionById(device.id);
+  if (connection) {
+    connection.device = { ...connection.device, ...device };
+  }
   render();
 }
 
-function updateCharacteristic(serviceUuid, characteristicUuid, patch) {
-  state.services = state.services.map(service => {
+function updateCharacteristic(deviceId, serviceUuid, characteristicUuid, patch) {
+  const connection = connectionById(deviceId);
+  if (!connection) return;
+
+  connection.services = connection.services.map(service => {
     if (service.uuid !== serviceUuid) return service;
     return {
       ...service,
@@ -604,6 +697,10 @@ function handleEvent(event, data = {}) {
       state.backendStatus = 'ready';
       state.backendPid = Number(data.pid) || 0;
       state.adapterState = data.state || state.adapterState;
+      state.scanning = !!data.scanning;
+      if (Array.isArray(data.connectedDevices)) {
+        hydrateConnections(data.connectedDevices);
+      }
       break;
     case 'state':
       state.adapterState = data.state || 'unknown';
@@ -619,19 +716,28 @@ function handleEvent(event, data = {}) {
       upsertDevice(data);
       return;
     case 'connected':
-      state.connectedDeviceId = data.device?.id || state.connectedDeviceId;
-      state.selectedDeviceId = state.connectedDeviceId;
-      state.services = data.services || state.services;
-      selectFirstCharacteristic();
+      {
+        const connection = upsertConnection(data.device, data.services || []);
+        if (connection) {
+          state.selectedDeviceId = connection.id;
+          state.activeTab = deviceTabId(connection.id);
+        }
+      }
       break;
     case 'disconnected':
-      state.connectedDeviceId = '';
-      state.services = [];
-      state.selectedServiceUuid = '';
-      state.selectedCharacteristicUuid = '';
+      {
+        const deviceId = data.deviceId || data.id;
+        const connection = connectionById(deviceId);
+        const device = data.device || connection?.device || state.devices.find(item => item.id === deviceId);
+        removeConnection(deviceId);
+        if (connection) {
+          pushLog('connect', 'Device disconnected', deviceLogDetail(device));
+        }
+        return;
+      }
       break;
     case 'notification':
-      updateCharacteristic(data.serviceUuid, data.characteristicUuid, {
+      updateCharacteristic(data.deviceId || activeDeviceId(), data.serviceUuid, data.characteristicUuid, {
         lastValueHex: data.valueHex,
         lastValueAscii: data.valueAscii,
         notifying: true
@@ -695,6 +801,7 @@ function connectWs() {
       const status = await request('status');
       state.adapterState = status.state || state.adapterState;
       state.scanning = !!status.scanning;
+      hydrateConnections(status.connectedDevices || []);
       state.backendStatus = 'ready';
       pushLog('system', 'Backend ready');
       notifyHostReady();
@@ -765,10 +872,12 @@ async function connectDevice(id) {
 
   try {
     const result = await request('connect', { id }, 30000);
-    state.connectedDeviceId = result.device.id;
-    state.services = result.services || [];
-    selectFirstCharacteristic();
-    pushLog('connect', 'Device connected', `${result.device.name || t('UNKNOWN', 'Unknown')} (${result.device.address || result.device.id})`);
+    const resultDevice = result.device || device;
+    const connection = upsertConnection({ ...device, ...resultDevice }, result.services || []);
+    if (connection) {
+      state.activeTab = deviceTabId(connection.id);
+    }
+    pushLog('connect', 'Device connected', deviceLogDetail(resultDevice));
   } catch (error) {
     pushLog('error', 'Connect failed', error.message);
   } finally {
@@ -777,26 +886,29 @@ async function connectDevice(id) {
   }
 }
 
-async function disconnectDevice() {
+async function disconnectDevice(deviceId = activeDeviceId()) {
+  if (!deviceId) return;
+  const connection = connectionById(deviceId);
+
   try {
-    await request('disconnect');
-    state.connectedDeviceId = '';
-    state.services = [];
-    state.selectedServiceUuid = '';
-    state.selectedCharacteristicUuid = '';
-    pushLog('connect', 'Device disconnected');
+    await request('disconnect', { deviceId });
+    if (connectionById(deviceId)) {
+      removeConnection(deviceId);
+      pushLog('connect', 'Device disconnected', deviceLogDetail(connection?.device || state.devices.find(item => item.id === deviceId)));
+    }
   } catch (error) {
     pushLog('error', 'Disconnect failed', error.message);
   }
 }
 
-async function refreshGatt() {
-  if (!state.connectedDeviceId) return;
+async function refreshGatt(deviceId = activeDeviceId()) {
+  const connection = connectionById(deviceId);
+  if (!connection) return;
 
   try {
-    const result = await request('discoverGatt', {}, 30000);
-    state.services = result.services || [];
-    selectFirstCharacteristic();
+    const result = await request('discoverGatt', { deviceId }, 30000);
+    connection.services = result.services || [];
+    selectFirstCharacteristic(connection);
     pushLog('system', 'GATT refreshed');
   } catch (error) {
     pushLog('error', 'GATT failed', error.message);
@@ -804,15 +916,17 @@ async function refreshGatt() {
 }
 
 async function readSelected() {
+  const deviceId = activeDeviceId();
   const characteristic = selectedCharacteristic();
   if (!characteristic || !canRead(characteristic)) return;
 
   try {
     const result = await request('read', {
+      deviceId,
       serviceUuid: characteristic.rawServiceUuid,
       characteristicUuid: characteristic.rawUuid
     });
-    updateCharacteristic(result.serviceUuid, result.characteristicUuid, {
+    updateCharacteristic(result.deviceId || deviceId, result.serviceUuid, result.characteristicUuid, {
       lastValueHex: result.valueHex,
       lastValueAscii: result.valueAscii
     });
@@ -823,11 +937,13 @@ async function readSelected() {
 }
 
 async function writeSelected() {
+  const deviceId = activeDeviceId();
   const characteristic = selectedCharacteristic();
   if (!characteristic || !canWrite(characteristic)) return;
 
   try {
     const result = await request('write', {
+      deviceId,
       serviceUuid: characteristic.rawServiceUuid,
       characteristicUuid: characteristic.rawUuid,
       mode: state.payloadMode,
@@ -841,16 +957,18 @@ async function writeSelected() {
 }
 
 async function toggleNotify() {
+  const deviceId = activeDeviceId();
   const characteristic = selectedCharacteristic();
   if (!characteristic || !canNotify(characteristic)) return;
 
   const method = characteristic.notifying ? 'unsubscribe' : 'subscribe';
   try {
     const result = await request(method, {
+      deviceId,
       serviceUuid: characteristic.rawServiceUuid,
       characteristicUuid: characteristic.rawUuid
     });
-    updateCharacteristic(result.serviceUuid, result.characteristicUuid, {
+    updateCharacteristic(result.deviceId || deviceId, result.serviceUuid, result.characteristicUuid, {
       notifying: method === 'subscribe'
     });
     pushLog('notify', method === 'subscribe' ? 'Notify enabled' : 'Notify disabled', result.characteristicUuid);
@@ -880,7 +998,16 @@ app.addEventListener('click', event => {
   const action = target.dataset.action;
   const id = target.dataset.id;
 
-  if (action === 'reconnect') connectWs();
+  if (action === 'switch-tab') {
+    const tab = target.dataset.tab;
+    if (tab === 'device') {
+      if (!connectionById(id)) return;
+      state.activeTab = deviceTabId(id);
+    } else {
+      state.activeTab = 'scan';
+    }
+    render();
+  }
   if (action === 'clear-devices') {
     state.devices = [];
     render();
@@ -889,18 +1016,21 @@ app.addEventListener('click', event => {
     state.logs = [];
     render();
   }
-  if (action === 'start-scan') void startScan();
-  if (action === 'stop-scan') void stopScan();
+  if (action === 'toggle-scan') {
+    void (state.scanning ? stopScan() : startScan());
+  }
   if (action === 'select-device') {
     state.selectedDeviceId = id;
     render();
   }
   if (action === 'connect-device') void connectDevice(id);
-  if (action === 'disconnect') void disconnectDevice();
-  if (action === 'refresh-gatt') void refreshGatt();
+  if (action === 'disconnect') void disconnectDevice(id || activeDeviceId());
+  if (action === 'refresh-gatt') void refreshGatt(id || activeDeviceId());
   if (action === 'select-characteristic') {
-    state.selectedServiceUuid = target.dataset.service;
-    state.selectedCharacteristicUuid = target.dataset.characteristic;
+    const connection = activeConnection();
+    if (!connection) return;
+    connection.selectedServiceUuid = target.dataset.service;
+    connection.selectedCharacteristicUuid = target.dataset.characteristic;
     render();
   }
   if (action === 'read-selected') void readSelected();

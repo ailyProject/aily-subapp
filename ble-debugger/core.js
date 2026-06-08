@@ -28,8 +28,8 @@ function displayUuid(uuid) {
   return normalized || '-';
 }
 
-function characteristicKey(serviceUuid, characteristicUuid) {
-  return `${normalizeUuid(serviceUuid)}:${normalizeUuid(characteristicUuid)}`;
+function characteristicKey(deviceId, serviceUuid, characteristicUuid) {
+  return `${String(deviceId || '')}:${normalizeUuid(serviceUuid)}:${normalizeUuid(characteristicUuid)}`;
 }
 
 function bufferToHex(buffer) {
@@ -106,11 +106,11 @@ function createBleDebuggerCore(options = {}) {
   const noble = options.noble || loadNoble();
   const sendEvent = typeof options.sendEvent === 'function' ? options.sendEvent : null;
   const peripherals = new Map();
+  const connections = new Map();
   const characteristicRefs = new Map();
   const notificationHandlers = new Map();
 
   let scanning = false;
-  let activePeripheral = null;
 
   const emit = (event, data = {}) => {
     if (sendEvent) sendEvent(event, data);
@@ -120,8 +120,17 @@ function createBleDebuggerCore(options = {}) {
     return {
       state: noble.state || 'unknown',
       scanning,
-      connected: !!activePeripheral
+      connected: connections.size > 0,
+      connectedCount: connections.size,
+      connectedDevices: Array.from(connections.values()).map(entry => ({
+        device: entry.device,
+        services: entry.services || []
+      }))
     };
+  }
+
+  function peripheralId(peripheral) {
+    return peripheral?.id || peripheral?.uuid || peripheral?.address || '';
   }
 
   function serializePeripheral(peripheral) {
@@ -141,7 +150,7 @@ function createBleDebuggerCore(options = {}) {
     };
   }
 
-  function serializeCharacteristic(service, characteristic) {
+  function serializeCharacteristic(deviceId, service, characteristic) {
     return {
       uuid: displayUuid(characteristic.uuid),
       rawUuid: normalizeUuid(characteristic.uuid),
@@ -150,15 +159,15 @@ function createBleDebuggerCore(options = {}) {
       properties: characteristic.properties || [],
       lastValueHex: '',
       lastValueAscii: '',
-      notifying: notificationHandlers.has(characteristicKey(service.uuid, characteristic.uuid))
+      notifying: notificationHandlers.has(characteristicKey(deviceId, service.uuid, characteristic.uuid))
     };
   }
 
-  function serializeService(service, characteristics) {
+  function serializeService(deviceId, service, characteristics) {
     return {
       uuid: displayUuid(service.uuid),
       rawUuid: normalizeUuid(service.uuid),
-      characteristics: characteristics.map(characteristic => serializeCharacteristic(service, characteristic))
+      characteristics: characteristics.map(characteristic => serializeCharacteristic(deviceId, service, characteristic))
     };
   }
 
@@ -222,12 +231,37 @@ function createBleDebuggerCore(options = {}) {
     return { scanning };
   }
 
-  function clearGattCache() {
+  function clearGattCache(deviceId = '') {
     for (const [key, entry] of notificationHandlers.entries()) {
+      if (deviceId && entry.deviceId !== deviceId) continue;
       entry.characteristic.removeListener('data', entry.handler);
       notificationHandlers.delete(key);
     }
-    characteristicRefs.clear();
+    for (const [key, entry] of characteristicRefs.entries()) {
+      if (deviceId && entry.deviceId !== deviceId) continue;
+      characteristicRefs.delete(key);
+    }
+  }
+
+  function resolveConnectedDeviceId(options = {}) {
+    const requestedId = options.deviceId || options.connectedDeviceId;
+    if (requestedId) {
+      const id = String(requestedId);
+      if (!connections.has(id)) {
+        throw new Error('BLE device is not connected');
+      }
+      return id;
+    }
+
+    if (connections.size === 1) {
+      return connections.keys().next().value;
+    }
+
+    if (!connections.size) {
+      throw new Error('No connected BLE device');
+    }
+
+    throw new Error('Multiple BLE devices are connected; specify deviceId');
   }
 
   async function connectDevice(options = {}) {
@@ -235,10 +269,6 @@ function createBleDebuggerCore(options = {}) {
     const peripheral = peripherals.get(id);
     if (!peripheral) {
       throw new Error('Device is not in the scan cache');
-    }
-
-    if (activePeripheral && activePeripheral.id !== peripheral.id) {
-      await disconnectDevice();
     }
 
     if (scanning) {
@@ -249,62 +279,115 @@ function createBleDebuggerCore(options = {}) {
       await callAsync(peripheral, 'connectAsync', 'connect', []);
     }
 
-    activePeripheral = peripheral;
-    peripheral.once('disconnect', () => {
-      if (activePeripheral && activePeripheral.id === peripheral.id) {
-        clearGattCache();
-        activePeripheral = null;
-        emit('disconnected', { id: peripheral.id });
-      }
-    });
+    const deviceId = peripheralId(peripheral) || id;
+    let connection = connections.get(deviceId);
+    let createdConnection = false;
+    if (!connection) {
+      const onDisconnect = () => {
+        clearGattCache(deviceId);
+        connections.delete(deviceId);
+        emit('disconnected', {
+          id: deviceId,
+          deviceId,
+          device: connection?.device || serializePeripheral(peripheral)
+        });
+      };
+      peripheral.once('disconnect', onDisconnect);
+      connection = {
+        peripheral,
+        device: serializePeripheral(peripheral),
+        services: [],
+        disconnectHandler: onDisconnect
+      };
+      connections.set(deviceId, connection);
+      createdConnection = true;
+    } else {
+      connection.peripheral = peripheral;
+      connection.device = serializePeripheral(peripheral);
+    }
 
-    const gatt = await discoverGatt();
-    emit('connected', { device: serializePeripheral(peripheral), services: gatt.services });
-    return { device: serializePeripheral(peripheral), services: gatt.services };
+    let gatt;
+    try {
+      gatt = await discoverGatt({ deviceId });
+    } catch (error) {
+      if (createdConnection) {
+        await disconnectDevice({ deviceId }).catch(() => undefined);
+      }
+      throw error;
+    }
+    connection.services = gatt.services;
+    connection.device = serializePeripheral(peripheral);
+    emit('connected', { device: connection.device, deviceId, services: gatt.services });
+    return { device: connection.device, deviceId, services: gatt.services };
   }
 
-  async function disconnectDevice() {
-    if (!activePeripheral) {
+  async function disconnectDevice(options = {}) {
+    const requestedId = options.deviceId || options.id;
+    const deviceIds = requestedId ? [resolveConnectedDeviceId({ deviceId: requestedId })] : Array.from(connections.keys());
+
+    if (!deviceIds.length) {
       clearGattCache();
-      return { connected: false };
+      return { connected: false, disconnectedIds: [] };
     }
 
-    const disconnectedId = activePeripheral.id;
-    const peripheral = activePeripheral;
-    clearGattCache();
-    activePeripheral = null;
+    const disconnectedIds = [];
+    for (const deviceId of deviceIds) {
+      const connection = connections.get(deviceId);
+      if (!connection) continue;
+      const { peripheral } = connection;
 
-    if (peripheral.state === 'connected') {
-      await callAsync(peripheral, 'disconnectAsync', 'disconnect', []);
+      clearGattCache(deviceId);
+      connections.delete(deviceId);
+      if (connection.disconnectHandler) {
+        peripheral.removeListener('disconnect', connection.disconnectHandler);
+      }
+
+      if (peripheral.state === 'connected') {
+        await callAsync(peripheral, 'disconnectAsync', 'disconnect', []);
+      }
+
+      disconnectedIds.push(deviceId);
+      emit('disconnected', {
+        id: deviceId,
+        deviceId,
+        device: connection.device || serializePeripheral(peripheral)
+      });
     }
 
-    emit('disconnected', { id: disconnectedId });
-    return { connected: false };
+    return {
+      connected: connections.size > 0,
+      disconnectedIds,
+      deviceId: disconnectedIds[0] || ''
+    };
   }
 
   async function discoverGatt(options = {}) {
-    if (!activePeripheral || activePeripheral.state !== 'connected') {
+    const deviceId = resolveConnectedDeviceId(options);
+    const connection = connections.get(deviceId);
+    if (!connection || connection.peripheral.state !== 'connected') {
       throw new Error('No connected BLE device');
     }
 
-    clearGattCache();
+    clearGattCache(deviceId);
     const serviceUuids = normalizeUuidList(options.serviceUuids);
-    const services = await callAsync(activePeripheral, 'discoverServicesAsync', 'discoverServices', [serviceUuids]);
+    const services = await callAsync(connection.peripheral, 'discoverServicesAsync', 'discoverServices', [serviceUuids]);
     const result = [];
 
     for (const service of services || []) {
       const characteristics = await callAsync(service, 'discoverCharacteristicsAsync', 'discoverCharacteristics', [[]]);
       for (const characteristic of characteristics || []) {
-        characteristicRefs.set(characteristicKey(service.uuid, characteristic.uuid), { service, characteristic });
+        characteristicRefs.set(characteristicKey(deviceId, service.uuid, characteristic.uuid), { deviceId, service, characteristic });
       }
-      result.push(serializeService(service, characteristics || []));
+      result.push(serializeService(deviceId, service, characteristics || []));
     }
 
-    return { services: result };
+    connection.services = result;
+    return { deviceId, services: result };
   }
 
   function getCharacteristic(options = {}) {
-    const key = characteristicKey(options.serviceUuid, options.characteristicUuid);
+    const deviceId = resolveConnectedDeviceId(options);
+    const key = characteristicKey(deviceId, options.serviceUuid, options.characteristicUuid);
     const entry = characteristicRefs.get(key);
     if (!entry) {
       throw new Error('Characteristic is not in the discovered GATT cache');
@@ -313,10 +396,11 @@ function createBleDebuggerCore(options = {}) {
   }
 
   async function readCharacteristic(options = {}) {
-    const { service, characteristic } = getCharacteristic(options);
+    const { deviceId, service, characteristic } = getCharacteristic(options);
     const value = await callAsync(characteristic, 'readAsync', 'read', []);
     const data = Buffer.from(value || []);
     return {
+      deviceId,
       serviceUuid: displayUuid(service.uuid),
       characteristicUuid: displayUuid(characteristic.uuid),
       valueHex: bufferToHex(data),
@@ -326,11 +410,12 @@ function createBleDebuggerCore(options = {}) {
   }
 
   async function writeCharacteristic(options = {}) {
-    const { service, characteristic } = getCharacteristic(options);
+    const { deviceId, service, characteristic } = getCharacteristic(options);
     const value = payloadToBuffer(options.payload, options.mode);
     const withoutResponse = options.withoutResponse === true;
     await callAsync(characteristic, 'writeAsync', 'write', [value, withoutResponse]);
     return {
+      deviceId,
       serviceUuid: displayUuid(service.uuid),
       characteristicUuid: displayUuid(characteristic.uuid),
       valueHex: bufferToHex(value),
@@ -341,11 +426,12 @@ function createBleDebuggerCore(options = {}) {
   }
 
   async function subscribeCharacteristic(options = {}) {
-    const { key, service, characteristic } = getCharacteristic(options);
+    const { key, deviceId, service, characteristic } = getCharacteristic(options);
     if (!notificationHandlers.has(key)) {
       const handler = (data, isNotification) => {
         const value = Buffer.from(data || []);
         emit('notification', {
+          deviceId,
           serviceUuid: displayUuid(service.uuid),
           characteristicUuid: displayUuid(characteristic.uuid),
           valueHex: bufferToHex(value),
@@ -355,11 +441,12 @@ function createBleDebuggerCore(options = {}) {
         });
       };
       characteristic.on('data', handler);
-      notificationHandlers.set(key, { characteristic, handler });
+      notificationHandlers.set(key, { deviceId, characteristic, handler });
     }
 
     await callAsync(characteristic, 'subscribeAsync', 'subscribe', []);
     return {
+      deviceId,
       serviceUuid: displayUuid(service.uuid),
       characteristicUuid: displayUuid(characteristic.uuid),
       notifying: true
@@ -367,7 +454,7 @@ function createBleDebuggerCore(options = {}) {
   }
 
   async function unsubscribeCharacteristic(options = {}) {
-    const { key, service, characteristic } = getCharacteristic(options);
+    const { key, deviceId, service, characteristic } = getCharacteristic(options);
     const entry = notificationHandlers.get(key);
     if (entry) {
       characteristic.removeListener('data', entry.handler);
@@ -376,6 +463,7 @@ function createBleDebuggerCore(options = {}) {
 
     await callAsync(characteristic, 'unsubscribeAsync', 'unsubscribe', []);
     return {
+      deviceId,
       serviceUuid: displayUuid(service.uuid),
       characteristicUuid: displayUuid(characteristic.uuid),
       notifying: false
@@ -401,7 +489,7 @@ function createBleDebuggerCore(options = {}) {
       if (scanning) await stopScan();
     } catch {}
     try {
-      if (activePeripheral) await disconnectDevice();
+      if (connections.size) await disconnectDevice();
     } catch {}
   }
 
@@ -523,39 +611,44 @@ function createBleDebuggerCore(options = {}) {
   }
 
   async function withConnectedDevice(selector, task) {
+    let connection = null;
     try {
-      const connection = await connectBySelector(selector);
+      connection = await connectBySelector(selector);
       const result = await task(connection);
       return {
         device: connection.device,
         ...result
       };
     } finally {
-      await disconnectDevice().catch(() => undefined);
+      if (connection?.device?.id) {
+        await disconnectDevice({ deviceId: connection.device.id }).catch(() => undefined);
+      }
     }
   }
 
   async function readBySelector(options = {}) {
-    return await withConnectedDevice(options, async () => ({
-      value: await readCharacteristic(options)
+    return await withConnectedDevice(options, async connection => ({
+      value: await readCharacteristic({ ...options, deviceId: connection.device.id })
     }));
   }
 
   async function writeBySelector(options = {}) {
-    return await withConnectedDevice(options, async () => ({
-      value: await writeCharacteristic(options)
+    return await withConnectedDevice(options, async connection => ({
+      value: await writeCharacteristic({ ...options, deviceId: connection.device.id })
     }));
   }
 
   async function notifyBySelector(options = {}) {
     const durationMs = numberOption(options.durationMs, 10000, 250);
-    return await withConnectedDevice(options, async () => {
+    return await withConnectedDevice(options, async connection => {
       const notifications = [];
-      const { service, characteristic } = getCharacteristic(options);
+      const deviceId = connection.device.id;
+      const { service, characteristic } = getCharacteristic({ ...options, deviceId });
       const handler = (data, isNotification) => {
         const value = Buffer.from(data || []);
         notifications.push({
           time: new Date().toISOString(),
+          deviceId,
           serviceUuid: displayUuid(service.uuid),
           characteristicUuid: displayUuid(characteristic.uuid),
           valueHex: bufferToHex(value),
@@ -565,9 +658,9 @@ function createBleDebuggerCore(options = {}) {
         });
       };
 
-      const key = characteristicKey(service.uuid, characteristic.uuid);
+      const key = characteristicKey(deviceId, service.uuid, characteristic.uuid);
       characteristic.on('data', handler);
-      notificationHandlers.set(key, { characteristic, handler });
+      notificationHandlers.set(key, { deviceId, characteristic, handler });
 
       try {
         await callAsync(characteristic, 'subscribeAsync', 'subscribe', []);
@@ -600,7 +693,7 @@ function createBleDebuggerCore(options = {}) {
       case 'connect':
         return await connectDevice(message);
       case 'disconnect':
-        return await disconnectDevice();
+        return await disconnectDevice(message);
       case 'discoverGatt':
         return await discoverGatt(message);
       case 'read':

@@ -142,8 +142,31 @@ function serveFile(filePath, response) {
     response.writeHead(200, {
       'Content-Type': MIME_TYPES[path.extname(filePath).toLowerCase()] || 'application/octet-stream'
     });
-    response.end(content);
+    response.end(maybeInjectDevReload(filePath, content));
   });
+}
+
+function maybeInjectDevReload(filePath, content) {
+  const reloadUrl = process.env.AILY_TOOL_DEV_RELOAD_URL;
+  if (!reloadUrl || path.extname(filePath).toLowerCase() !== '.html') return content;
+
+  const html = content.toString('utf8');
+  const snippet = [
+    '<script id="aily-tool-dev-reload">',
+    '(() => {',
+    `  const source = new EventSource(${JSON.stringify(reloadUrl)});`,
+    "  source.addEventListener('reload', () => window.location.reload());",
+    "  source.onerror = () => undefined;",
+    '})();',
+    '</script>'
+  ].join('\n');
+
+  const bodyClosePattern = /<\/body>/i;
+  const nextHtml = bodyClosePattern.test(html)
+    ? html.replace(bodyClosePattern, `${snippet}\n$&`)
+    : `${html}\n${snippet}`;
+
+  return Buffer.from(nextHtml, 'utf8');
 }
 
 function verifyToken(requestUrl, token) {
@@ -223,10 +246,13 @@ async function startBleDebuggerServer(options = {}) {
 
   wss.on('connection', socket => {
     clients.add(socket);
+    const currentStatus = core.status();
     socket.send(JSON.stringify({
       event: 'ready',
       data: {
-        state: core.status().state,
+        state: currentStatus.state,
+        scanning: currentStatus.scanning,
+        connectedDevices: currentStatus.connectedDevices || [],
         pid: process.pid
       }
     }));

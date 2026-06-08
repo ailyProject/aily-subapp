@@ -6,41 +6,20 @@ const http = require('http');
 const path = require('path');
 const { URL } = require('url');
 const { WebSocketServer, WebSocket } = require('ws');
-const { asError, createFfsManagerCore } = require('./core');
+const { asError, createToolCore } = require('./core');
 
+const TOOL_ID = '{{tool-id}}';
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
-  '.wasm': 'application/wasm',
   '.woff2': 'font/woff2',
   '.woff': 'font/woff',
   '.ttf': 'font/ttf',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon'
-};
-
-const ACTION_ALIASES = {
-  status: 'status',
-  shutdown: 'shutdown',
-  ports: 'serial.list',
-  'serial.list': 'serial.list',
-  readDeviceInfo: 'device.readInfo',
-  'device.readInfo': 'device.readInfo',
-  readPartitionTable: 'partition.readTable',
-  'partition.readTable': 'partition.readTable',
-  readPartitionImage: 'partition.readImage',
-  'partition.readImage': 'partition.readImage',
-  writePartitionImage: 'partition.writeImage',
-  'partition.writeImage': 'partition.writeImage',
-  erasePartition: 'partition.erase',
-  'partition.erase': 'partition.erase',
-  release: 'session.release',
-  'session.release': 'session.release',
-  waitForPortReady: 'port.waitReady',
-  'port.waitReady': 'port.waitReady'
 };
 
 function createToken() {
@@ -60,15 +39,21 @@ function sendJson(response, statusCode, payload) {
 function safeStaticPath(uiRoot, requestPath) {
   const pathname = requestPath === '/' ? '/index.html' : requestPath;
   const decoded = decodeURIComponent(pathname);
+  if (decoded.includes('\0')) return null;
+
   const resolvedRoot = path.resolve(uiRoot);
   const resolvedFile = path.resolve(path.join(resolvedRoot, decoded));
   const relative = path.relative(resolvedRoot, resolvedFile);
-  if (relative.startsWith('..') || path.isAbsolute(relative)) return null;
+
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    return null;
+  }
+
   return resolvedFile;
 }
 
 function i18nPathFromRequest(requestPath) {
-  const match = requestPath.match(/^\/(?:tools\/ffs-manager\/)?i18n\/([a-zA-Z0-9_-]+\.json)$/);
+  const match = requestPath.match(new RegExp(`^/(?:tools/${TOOL_ID}/)?i18n/([a-zA-Z0-9_-]+\\.json)$`));
   if (!match) return '';
   return path.join(__dirname, 'i18n', match[1]);
 }
@@ -80,15 +65,9 @@ function penpalVendorPath() {
 }
 
 function serveStatic(uiRoot, request, response) {
-  const requestUrl = new URL(request.url, 'http://127.0.0.1');
+  const requestUrl = new URL(request.url || '/', 'http://127.0.0.1');
   if (requestUrl.pathname === '/vendor/penpal.min.js') {
     serveFile(penpalVendorPath(), response);
-    return;
-  }
-
-  const fontPath = fontPathFromRequest(requestUrl.pathname);
-  if (fontPath) {
-    serveFile(fontPath, response);
     return;
   }
 
@@ -106,29 +85,6 @@ function serveStatic(uiRoot, request, response) {
   }
 
   serveFile(filePath, response);
-}
-
-function fontPathFromRequest(requestPath) {
-  if (!requestPath.startsWith('/fonts/')) return '';
-
-  const decoded = decodeURIComponent(requestPath.replace(/^\/fonts\//, ''));
-  if (decoded.includes('\0')) return '';
-
-  const candidates = [
-    path.join(__dirname, 'ui', 'fonts'),
-    path.resolve(__dirname, '..', '..', '..', 'public', 'fonts'),
-    process.resourcesPath ? path.join(process.resourcesPath, 'renderer', 'fonts') : ''
-  ].filter(Boolean);
-
-  for (const root of candidates) {
-    const resolvedRoot = path.resolve(root);
-    const resolvedFile = path.resolve(path.join(resolvedRoot, decoded));
-    const relative = path.relative(resolvedRoot, resolvedFile);
-    if (relative.startsWith('..') || path.isAbsolute(relative)) continue;
-    if (fs.existsSync(resolvedFile)) return resolvedFile;
-  }
-
-  return path.join(candidates[0] || __dirname, decoded);
 }
 
 function serveFile(filePath, response) {
@@ -177,7 +133,7 @@ function createRpcMessage(id, ok, result = {}, error = '') {
   return { id, ok, result, error };
 }
 
-async function startFfsManagerServer(options = {}) {
+async function startToolServer(options = {}) {
   const host = options.host || '127.0.0.1';
   const port = Number.isFinite(Number(options.port)) ? Number(options.port) : 0;
   const token = options.token || createToken();
@@ -195,54 +151,40 @@ async function startFfsManagerServer(options = {}) {
     }
   };
 
-  const core = createFfsManagerCore({
+  const core = createToolCore({
     sendEvent: (event, data = {}) => broadcast({ event, data })
   });
 
-  const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 * 1024 });
+  const wss = new WebSocketServer({ noServer: true });
 
   async function stop() {
     if (closing) return;
     closing = true;
 
-    await core.cleanup().catch(() => undefined);
+    await core.shutdown().catch(() => undefined);
     for (const client of clients) {
-      client.close(1001, 'FFS manager server closed');
+      client.close(1001, '{{Tool Name}} server closed');
     }
 
-    await new Promise(resolve => {
-      let pending = 0;
-      const done = () => {
-        pending -= 1;
-        if (pending <= 0) resolve();
-      };
-      pending += 1;
-      wss.close(done);
-      if (server) {
-        pending += 1;
-        server.close(done);
-      }
-      done();
-    });
+    await new Promise(resolve => wss.close(resolve));
+    if (server) {
+      await new Promise(resolve => server.close(resolve));
+    }
   }
 
   async function handleRpc(socket, message) {
     const id = message.id;
     const method = message.method || message.action;
-    const action = ACTION_ALIASES[method];
-
-    if (!action) {
-      socket.send(JSON.stringify(createRpcMessage(id, false, {}, `Unknown method: ${method}`)));
-      return;
-    }
 
     try {
       const result = await core.executeAction({
-        action,
-        ...(message.params || message.data || {})
+        action: method,
+        params: message.params || message.data || {}
       });
       socket.send(JSON.stringify(createRpcMessage(id, true, result)));
-      if (action === 'shutdown') await stop();
+      if (method === 'shutdown') {
+        await stop();
+      }
     } catch (error) {
       socket.send(JSON.stringify(createRpcMessage(id, false, {}, asError(error))));
     }
@@ -253,7 +195,7 @@ async function startFfsManagerServer(options = {}) {
     socket.send(JSON.stringify({
       event: 'ready',
       data: {
-        state: core.status(),
+        state: core.status().state,
         pid: process.pid
       }
     }));
@@ -275,7 +217,7 @@ async function startFfsManagerServer(options = {}) {
   });
 
   server = http.createServer((request, response) => {
-    const requestUrl = new URL(request.url, `http://${host}`);
+    const requestUrl = new URL(request.url || '/', `http://${host}`);
 
     if (request.method === 'OPTIONS') {
       sendJson(response, 204, {});
@@ -283,7 +225,7 @@ async function startFfsManagerServer(options = {}) {
     }
 
     if (requestUrl.pathname === '/health') {
-      sendJson(response, 200, { ok: true, state: core.status() });
+      sendJson(response, 200, { ok: true, state: core.status().state });
       return;
     }
 
@@ -301,7 +243,7 @@ async function startFfsManagerServer(options = {}) {
   });
 
   server.on('upgrade', (request, socket, head) => {
-    const requestUrl = new URL(request.url, `http://${host}`);
+    const requestUrl = new URL(request.url || '/', `http://${host}`);
     if (requestUrl.pathname !== '/ws' || !verifyToken(requestUrl, token)) {
       socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
       socket.destroy();
@@ -337,5 +279,5 @@ async function startFfsManagerServer(options = {}) {
 }
 
 module.exports = {
-  startFfsManagerServer
+  startToolServer
 };
