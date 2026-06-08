@@ -1,0 +1,343 @@
+#!/usr/bin/env node
+
+import { build } from 'esbuild';
+import { spawn } from 'node:child_process';
+import { builtinModules } from 'node:module';
+import { cp, mkdir, readFile, readdir, rm, stat, writeFile, chmod } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const nodeTarget = 'node18';
+const assetDirs = ['ui', 'i18n', 'skill'];
+const vendorFiles = [
+  {
+    from: ['node_modules', 'penpal', 'dist', 'penpal.min.js'],
+    to: ['vendor', 'penpal.min.js']
+  }
+];
+
+const builtinExternals = [
+  ...builtinModules,
+  ...builtinModules.map(moduleName => `node:${moduleName}`)
+];
+
+const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const runtimeExternalPackages = new Set([
+  '@abandonware/noble',
+  'serialport'
+]);
+
+const runtimeExternalPatterns = Array.from(runtimeExternalPackages)
+  .flatMap(packageName => [packageName, `${packageName}/*`]);
+
+function toDisplayPath(filePath) {
+  return path.relative(rootDir, filePath).replace(/\\/g, '/');
+}
+
+async function pathExists(filePath) {
+  try {
+    await stat(filePath);
+    return true;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
+async function readJson(filePath) {
+  const text = await readFile(filePath, 'utf8');
+  return JSON.parse(text);
+}
+
+function assertWithin(parentDir, childPath) {
+  const parent = path.resolve(parentDir);
+  const child = path.resolve(childPath);
+  const relative = path.relative(parent, child);
+
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error(`Refusing to operate outside ${parent}: ${child}`);
+  }
+}
+
+function lockPackageKey(packageName) {
+  return `node_modules/${packageName}`;
+}
+
+function runtimeDependencySpec(project, packageName, requestedSpec) {
+  const lockedVersion = project.lockJson?.packages?.[lockPackageKey(packageName)]?.version;
+  return lockedVersion || requestedSpec;
+}
+
+function getRuntimeDependencies(project) {
+  const dependencies = project.packageJson.dependencies || {};
+  const runtimeDependencies = {};
+
+  for (const [packageName, requestedSpec] of Object.entries(dependencies)) {
+    if (runtimeExternalPackages.has(packageName)) {
+      runtimeDependencies[packageName] = runtimeDependencySpec(project, packageName, requestedSpec);
+    }
+  }
+
+  return runtimeDependencies;
+}
+
+function rewriteDistPackageJson(project) {
+  const packageJson = project.packageJson;
+  const runtimeDependencies = getRuntimeDependencies(project);
+  const next = {
+    ...packageJson,
+    main: 'index.js'
+  };
+
+  if (typeof packageJson.bin === 'string') {
+    next.bin = 'index.js';
+  } else if (packageJson.bin && typeof packageJson.bin === 'object') {
+    next.bin = Object.fromEntries(
+      Object.keys(packageJson.bin).map(command => [command, 'index.js'])
+    );
+  }
+
+  delete next.devDependencies;
+  delete next.peerDependencies;
+  delete next.optionalDependencies;
+
+  if (Object.keys(runtimeDependencies).length) {
+    next.dependencies = runtimeDependencies;
+  } else {
+    delete next.dependencies;
+  }
+
+  return next;
+}
+
+async function discoverProjects() {
+  const entries = await readdir(rootDir, { withFileTypes: true });
+  const projects = [];
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (entry.name.startsWith('.')) continue;
+    if (entry.name === 'node_modules' || entry.name === 'scripts') continue;
+
+    const dir = path.join(rootDir, entry.name);
+    const packagePath = path.join(dir, 'package.json');
+    if (!(await pathExists(packagePath))) continue;
+
+    const packageJson = await readJson(packagePath);
+    const lockPath = path.join(dir, 'package-lock.json');
+    const lockJson = await pathExists(lockPath) ? await readJson(lockPath) : null;
+    projects.push({
+      id: entry.name,
+      dir,
+      packagePath,
+      packageJson,
+      lockJson
+    });
+  }
+
+  return projects.sort((a, b) => a.id.localeCompare(b.id));
+}
+
+function selectProjects(projects, selectors) {
+  if (!selectors.length) return projects;
+
+  const selected = [];
+  const missing = [];
+
+  for (const selector of selectors) {
+    const normalized = selector.replace(/[\\/]+$/, '');
+    const match = projects.find(project => (
+      project.id === normalized ||
+      project.packageJson.name === normalized ||
+      toDisplayPath(project.dir) === normalized.replace(/\\/g, '/')
+    ));
+
+    if (match && !selected.includes(match)) {
+      selected.push(match);
+    } else if (!match) {
+      missing.push(selector);
+    }
+  }
+
+  if (missing.length) {
+    throw new Error(`Unknown project selector: ${missing.join(', ')}`);
+  }
+
+  return selected;
+}
+
+async function copyIfExists(source, destination, label, warnings) {
+  if (!(await pathExists(source))) {
+    warnings.push(`Missing ${label}: ${toDisplayPath(source)}`);
+    return false;
+  }
+
+  await mkdir(path.dirname(destination), { recursive: true });
+  await cp(source, destination, { recursive: true });
+  return true;
+}
+
+async function emptyDirectory(dir) {
+  await mkdir(dir, { recursive: true });
+  const entries = await readdir(dir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    await rm(path.join(dir, entry.name), { recursive: true, force: true });
+  }
+}
+
+function runCommand(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: options.cwd,
+      env: process.env,
+      shell: process.platform === 'win32',
+      stdio: 'inherit'
+    });
+
+    child.on('error', reject);
+    child.on('exit', code => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      reject(new Error(`${command} ${args.join(' ')} exited with code ${code}`));
+    });
+  });
+}
+
+async function copyRuntimeAssets(project, distDir, warnings) {
+  for (const dirName of assetDirs) {
+    const source = path.join(project.dir, dirName);
+    const destination = path.join(distDir, dirName);
+    if (await pathExists(source)) {
+      await cp(source, destination, { recursive: true });
+    }
+  }
+
+  for (const file of vendorFiles) {
+    await copyIfExists(
+      path.join(project.dir, ...file.from),
+      path.join(distDir, ...file.to),
+      file.from.join('/'),
+      warnings
+    );
+  }
+
+}
+
+async function writeRuntimePackage(project, packageDir) {
+  await writeFile(
+    path.join(packageDir, 'package.json'),
+    `${JSON.stringify(rewriteDistPackageJson(project), null, 2)}\n`,
+    'utf8'
+  );
+}
+
+async function installRuntimeDependencies(project, packageDir) {
+  const runtimeDependencies = getRuntimeDependencies(project);
+  if (!Object.keys(runtimeDependencies).length) return;
+
+  console.log(`  installing runtime dependencies in ${toDisplayPath(packageDir)}`);
+  await runCommand(
+    npmCommand,
+    ['install', '--omit=dev', '--no-audit', '--no-fund'],
+    { cwd: packageDir }
+  );
+}
+
+async function buildProject(project) {
+  const entry = path.resolve(project.dir, project.packageJson.main || 'index.js');
+  const distRoot = path.join(project.dir, 'dist');
+  const packageDir = path.join(distRoot, project.id);
+  const outfile = path.join(packageDir, 'index.js');
+  const warnings = [];
+
+  if (!(await pathExists(entry))) {
+    throw new Error(`${project.id} entry not found: ${toDisplayPath(entry)}`);
+  }
+
+  assertWithin(project.dir, distRoot);
+  assertWithin(project.dir, packageDir);
+  if (path.basename(distRoot) !== 'dist') {
+    throw new Error(`Unexpected dist directory: ${distRoot}`);
+  }
+
+  await emptyDirectory(distRoot);
+  await mkdir(packageDir, { recursive: true });
+
+  const result = await build({
+    entryPoints: [entry],
+    outfile,
+    bundle: true,
+    format: 'cjs',
+    platform: 'node',
+    target: nodeTarget,
+    external: [...builtinExternals, ...runtimeExternalPatterns],
+    legalComments: 'none',
+    sourcemap: true,
+    logLevel: 'silent'
+  });
+
+  for (const warning of result.warnings) {
+    warnings.push(warning.text);
+  }
+
+  await chmod(outfile, 0o755).catch(() => undefined);
+  await writeRuntimePackage(project, packageDir);
+  await installRuntimeDependencies(project, packageDir);
+  await copyRuntimeAssets(project, packageDir, warnings);
+
+  return {
+    project,
+    outfile,
+    warnings
+  };
+}
+
+function printHelp() {
+  console.log(`Usage: npm run build -- [project...]
+
+Build all tool projects with esbuild into each project's dist/<project> directory.
+
+Examples:
+  npm run build
+  npm run build -- ble-debugger
+  npm run build -- @aily-project/ble-debugger-backend`);
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+  if (args.includes('--help') || args.includes('-h')) {
+    printHelp();
+    return;
+  }
+
+  const projects = await discoverProjects();
+  const selectedProjects = selectProjects(projects, args);
+
+  if (!selectedProjects.length) {
+    throw new Error('No tool projects found.');
+  }
+
+  console.log(`Building ${selectedProjects.length} project(s) for ${nodeTarget}...`);
+
+  const results = [];
+  for (const project of selectedProjects) {
+    const result = await buildProject(project);
+    results.push(result);
+    console.log(`- ${project.id} -> ${toDisplayPath(result.outfile)}`);
+    for (const warning of result.warnings) {
+      console.warn(`  warning: ${warning}`);
+    }
+  }
+
+  console.log(`Done. Built ${results.length} project(s).`);
+}
+
+main().catch(error => {
+  console.error(error?.stack || error);
+  process.exit(1);
+});

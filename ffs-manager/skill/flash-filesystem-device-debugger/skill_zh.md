@@ -1,6 +1,6 @@
 ---
 name: flash-filesystem-device-debugger
-description: "当在 Aily Blockly 或 Aily Chat AI IDE 中开发或调试 ESP MCU flash storage 和 filesystem workflows 时使用，包括 serial bootloader access、partition tables、SPIFFS、LittleFS、FATFS、flash read/write/erase、image export/import、file upload limits、BLE discovery，以及 child/tools/ffs-manager 工具。"
+description: "当在 Aily Blockly 或 Aily Chat AI IDE 中开发或调试 ESP MCU flash storage 和 filesystem workflows 时使用，包括 serial bootloader access、partition tables、SPIFFS、LittleFS、FATFS、flash read/write/erase、image export/import、file upload limits，以及 child/tools/ffs-manager 工具。"
 ---
 
 # Flash 文件系统设备调试器
@@ -13,8 +13,8 @@ description: "当在 Aily Blockly 或 Aily Chat AI IDE 中开发或调试 ESP MC
 
 1. 确认 chip family、board、serial port、requested baud、flash size、partition scheme 和 firmware framework。
 2. 确认 target partition label、type/subtype、offset、size 和 filesystem type：SPIFFS、LittleFS、FATFS 或 normal data/app partition。
-3. 记录 operation：read info、read partition table、export image、browse files、upload file、import image、write back、erase 或 BLE scan。
-4. 只有当失败阶段会改变调试路径时才追问：serial port busy、bootloader connect failed、partition table not found、filesystem mount failed、filename rejected、image write failed、erase failed 或 BLE scan empty。
+3. 记录 operation：read info、read partition table、export image、browse files、upload file、import image、write back 或 erase。
+4. 只有当失败阶段会改变调试路径时才追问：serial port busy、bootloader connect failed、partition table not found、filesystem mount failed、filename rejected、image write failed 或 erase failed。
 5. 将 destructive operations 视作高风险。erase、import 或 write back 前确认 offsets、sizes、labels 和 backups。
 
 ## 存储规则
@@ -38,7 +38,7 @@ description: "当在 Aily Blockly 或 Aily Chat AI IDE 中开发或调试 ESP MC
 - `src/app/tools/child-tool-host/child-tool-host.component.ts` 嵌入 UI，通过 query params 传递 language/theme，并通过 Penpal 交换 host context。
 - `child/tools/ffs-manager/index.js` 选择 RPC、serve 或 CLI mode。
 - `child/tools/ffs-manager/server.js` 提供 UI 和 WASM assets、托管 `/ws`、校验 token、映射 RPC aliases，并暴露 `/health` 和 `/api/shutdown`。
-- `child/tools/ffs-manager/core.js` 拥有 serial port access、`esptool-js` sessions、flash reads/writes/erase、partition probing/parsing、BLE status/scan 和 cleanup。
+- `child/tools/ffs-manager/core.js` 拥有 serial port access、`esptool-js` sessions、flash reads/writes/erase、partition probing/parsing 和 cleanup。
 - `child/tools/ffs-manager/serial-port-adapter.js` 将 Node `serialport` 适配到 transport API。
 - `child/tools/ffs-manager/usb-bridge.js` 为特定 USB bridges 解析 baud behavior。
 - `child/tools/ffs-manager/ui/app.js` 渲染 device info、partition map、filesystem explorer、image import/export、file upload/download 和 host serial coordination。
@@ -60,11 +60,9 @@ node child/tools/ffs-manager/index.js info --port COM3 --baud 921600
 node child/tools/ffs-manager/index.js partitions --port COM3 --baud 921600
 node child/tools/ffs-manager/index.js read --port COM3 --offset 0x290000 --size 0x170000 --baud 921600
 node child/tools/ffs-manager/index.js erase --port COM3 --offset 0x290000 --size 0x170000 --baud 921600
-node child/tools/ffs-manager/index.js ble-status
-node child/tools/ffs-manager/index.js ble-scan --duration-ms 5000 --service 180D
 ```
 
-所有非 help CLI commands 都向 stdout 写入一个 JSON object。如果没有硬件，使用 `--help`、`status`、`ports` 和代码级检查，不要编造 flash 或 BLE 结果。
+所有非 help CLI commands 都向 stdout 写入一个 JSON object。如果没有硬件，使用 `--help`、`status`、`ports` 和代码级检查，不要编造 flash 结果。
 
 ## 调试路径
 
@@ -76,7 +74,6 @@ node child/tools/ffs-manager/index.js ble-scan --duration-ms 5000 --service 180D
 - Filesystem mount failed：确认 partition type/subtype、filesystem type、image size、block/page assumptions，以及 partition 是否由匹配 library 格式化。
 - Upload rejected：检查 filename byte limit、path rules、remaining capacity 和 SPIFFS directory limitations。
 - Write back failed：验证 exported backup、image size、port stability、baud，以及 target offset/size 是否仍匹配 selected partition。
-- BLE scan empty：检查 adapter state、service UUID filter、power、advertising mode 和 distance。
 - UI is stuck：检查 stdout 上的 backend readiness JSON、WebSocket token/origin、`/health`、Penpal `childReady`、host serial tool signals 和 overlay error。
 
 ## 固件指导
@@ -94,7 +91,7 @@ node child/tools/ffs-manager/index.js ble-scan --duration-ms 5000 --service 180D
 
 修改 FFS Manager 工具本身时：
 
-- 将 serial、ESP loader、flash read/write/erase、partition parsing、BLE scan 和 cleanup behavior 放在 `core.js`。
+- 将 serial、ESP loader、flash read/write/erase、partition parsing 和 cleanup behavior 放在 `core.js`。
 - 将 Node serial adapter behavior 放在 `serial-port-adapter.js`。
 - 将 USB bridge baud selection 放在 `usb-bridge.js`。
 - 将 static serving、WASM MIME type、token、WebSocket RPC aliases、`/health` 和 shutdown behavior 放在 `server.js`。

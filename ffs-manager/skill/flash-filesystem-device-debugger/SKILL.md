@@ -1,6 +1,6 @@
 ---
 name: flash-filesystem-device-debugger
-description: "Use when developing or debugging ESP MCU flash storage and filesystem workflows in Aily Blockly or Aily Chat AI IDE, including serial bootloader access, partition tables, SPIFFS, LittleFS, FATFS, flash read/write/erase, image export/import, file upload limits, BLE discovery, and the child/tools/ffs-manager tool."
+description: "Use when developing or debugging ESP MCU flash storage and filesystem workflows in Aily Blockly or Aily Chat AI IDE, including serial bootloader access, partition tables, SPIFFS, LittleFS, FATFS, flash read/write/erase, image export/import, file upload limits, and the child/tools/ffs-manager tool."
 ---
 
 # Flash Filesystem Device Debugger
@@ -13,8 +13,8 @@ Start by identifying the storage target and risk level:
 
 1. Confirm the chip family, board, serial port, requested baud, flash size, partition scheme, and firmware framework.
 2. Identify the target partition label, type/subtype, offset, size, and filesystem type: SPIFFS, LittleFS, FATFS, or normal data/app partition.
-3. Capture the operation: read info, read partition table, export image, browse files, upload file, import image, write back, erase, or BLE scan.
-4. Ask for the exact failure stage only when it changes the path: serial port busy, bootloader connect failed, partition table not found, filesystem mount failed, filename rejected, image write failed, erase failed, or BLE scan empty.
+3. Capture the operation: read info, read partition table, export image, browse files, upload file, import image, write back, or erase.
+4. Ask for the exact failure stage only when it changes the path: serial port busy, bootloader connect failed, partition table not found, filesystem mount failed, filename rejected, image write failed, or erase failed.
 5. Treat destructive operations as high-risk. Confirm offsets, sizes, labels, and backups before erase, import, or write back.
 
 ## Storage Rules
@@ -38,7 +38,7 @@ Use the existing child tool boundaries:
 - `src/app/tools/child-tool-host/child-tool-host.component.ts` embeds the UI, passes language/theme through query params, and exchanges host context through Penpal.
 - `child/tools/ffs-manager/index.js` selects RPC, serve, or CLI mode.
 - `child/tools/ffs-manager/server.js` serves the UI and WASM assets, hosts `/ws`, validates the token, maps RPC aliases, and exposes `/health` plus `/api/shutdown`.
-- `child/tools/ffs-manager/core.js` owns serial port access, `esptool-js` sessions, flash reads/writes/erase, partition probing/parsing, BLE status/scan, and cleanup.
+- `child/tools/ffs-manager/core.js` owns serial port access, `esptool-js` sessions, flash reads/writes/erase, partition probing/parsing, and cleanup.
 - `child/tools/ffs-manager/serial-port-adapter.js` adapts Node `serialport` to the transport API.
 - `child/tools/ffs-manager/usb-bridge.js` resolves baud behavior for specific USB bridges.
 - `child/tools/ffs-manager/ui/app.js` renders device info, partition map, filesystem explorer, image import/export, file upload/download, and host serial coordination.
@@ -60,11 +60,9 @@ node child/tools/ffs-manager/index.js info --port COM3 --baud 921600
 node child/tools/ffs-manager/index.js partitions --port COM3 --baud 921600
 node child/tools/ffs-manager/index.js read --port COM3 --offset 0x290000 --size 0x170000 --baud 921600
 node child/tools/ffs-manager/index.js erase --port COM3 --offset 0x290000 --size 0x170000 --baud 921600
-node child/tools/ffs-manager/index.js ble-status
-node child/tools/ffs-manager/index.js ble-scan --duration-ms 5000 --service 180D
 ```
 
-All non-help CLI commands write one JSON object to stdout. If hardware is unavailable, use `--help`, `status`, `ports`, and code-level checks instead of inventing flash or BLE results.
+All non-help CLI commands write one JSON object to stdout. If hardware is unavailable, use `--help`, `status`, `ports`, and code-level checks instead of inventing flash results.
 
 ## Debugging Path
 
@@ -76,7 +74,6 @@ Follow the failing stage:
 - Filesystem mount failed: confirm partition type/subtype, filesystem type, image size, block/page assumptions, and whether the partition was formatted by a matching library.
 - Upload rejected: check filename byte limit, path rules, remaining capacity, and SPIFFS directory limitations.
 - Write back failed: verify exported backup, image size, port stability, baud, and that the target offset/size still match the selected partition.
-- BLE scan empty: check adapter state, service UUID filter, power, advertising mode, and distance.
 - UI is stuck: check backend readiness JSON on stdout, WebSocket token/origin, `/health`, Penpal `childReady`, host serial tool signals, and the overlay error.
 
 ## Firmware Guidance
@@ -94,7 +91,7 @@ When designing ESP filesystem firmware:
 
 When changing the FFS Manager tool itself:
 
-- Put serial, ESP loader, flash read/write/erase, partition parsing, BLE scan, and cleanup behavior in `core.js`.
+- Put serial, ESP loader, flash read/write/erase, partition parsing, and cleanup behavior in `core.js`.
 - Put Node serial adapter behavior in `serial-port-adapter.js`.
 - Put USB bridge baud selection in `usb-bridge.js`.
 - Put static serving, WASM MIME type, token, WebSocket RPC aliases, `/health`, and shutdown behavior in `server.js`.

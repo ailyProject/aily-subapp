@@ -39,25 +39,10 @@ function parseCliArgs(args) {
   return options;
 }
 
-function boolOption(value, defaultValue = false) {
-  if (value === undefined) return defaultValue;
-  if (typeof value === 'boolean') return value;
-  return !['0', 'false', 'no', 'off'].includes(String(value).toLowerCase());
-}
-
 function numberOption(value, defaultValue, min = 0) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return defaultValue;
   return Math.max(min, parsed);
-}
-
-function stringListOption(value) {
-  if (value === undefined) return [];
-  const values = Array.isArray(value) ? value : [value];
-  return values
-    .flatMap(item => String(item).split(/[\s,;]+/))
-    .map(item => item.trim())
-    .filter(Boolean);
 }
 
 function helpText() {
@@ -73,8 +58,6 @@ function helpText() {
     '  node index.js partitions --port <path> [--baud 921600]',
     '  node index.js read --port <path> --offset <number> --size <number> [--baud 921600]',
     '  node index.js erase --port <path> --offset <number> --size <number> [--baud 921600]',
-    '  node index.js ble-status',
-    '  node index.js ble-scan [--duration-ms 5000] [--service 180D]',
     '',
     'All non-help commands write one JSON object to stdout.'
   ].join('\n');
@@ -147,17 +130,6 @@ async function runCli(command, rawArgs, runtime = {}) {
         data = await core.erasePartition({
           ...portOptions(options),
           partition: partitionOptions(options)
-        });
-        break;
-      case 'ble-status':
-        data = await core.bleStatus();
-        break;
-      case 'ble-scan':
-        data = await core.scanBle({
-          durationMs: numberOption(options.durationMs || options.scanMs, 5000, 250),
-          waitMs: numberOption(options.waitMs, 10000, 100),
-          serviceUuids: stringListOption(options.service || options.services),
-          allowDuplicates: boolOption(options.allowDuplicates, false)
         });
         break;
       default:

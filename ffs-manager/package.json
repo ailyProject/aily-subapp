@@ -14,7 +14,6 @@
     "ports": "node index.js ports"
   },
   "dependencies": {
-    "@abandonware/noble": "^1.9.2-26",
     "esptool-js": "^0.6.0",
     "penpal": "^7.0.6",
     "serialport": "^13.0.0",

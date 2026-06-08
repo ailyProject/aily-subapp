@@ -74,7 +74,7 @@
     },
     "childDir": "tools/ffs-manager",
     "routePath": "/child-tool/ffs-manager-child",
-    "requiredDependencies": ["@abandonware/noble", "esptool-js", "serialport", "ws", "penpal"],
+    "requiredDependencies": ["esptool-js", "serialport", "ws", "penpal"],
     "installHint": "Run npm run install:ffs-manager in the project root.",
     "startupTimeoutMs": 10000,
     "env": {

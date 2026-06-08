@@ -1,7 +1,5 @@
 'use strict';
 
-const path = require('path');
-const { pathToFileURL } = require('url');
 const { NodeSerialPortAdapter, sleep } = require('./serial-port-adapter');
 const { resolveDesiredBaud } = require('./usb-bridge');
 
@@ -33,8 +31,6 @@ const FLASH_MANUFACTURERS = {
 };
 
 let esptoolPromise = null;
-let nobleInstance = null;
-
 function asError(error) {
   if (!error) return '';
   if (error instanceof Error) return error.message || String(error);
@@ -67,28 +63,6 @@ function readAscii(bytes) {
   return text.trim();
 }
 
-function bufferToHex(buffer) {
-  return Array.from(buffer || [])
-    .map(byte => byte.toString(16).padStart(2, '0').toUpperCase())
-    .join(' ');
-}
-
-function normalizeUuid(uuid) {
-  return String(uuid || '').trim().toLowerCase().replace(/^0x/, '').replace(/-/g, '');
-}
-
-function displayUuid(uuid) {
-  const normalized = normalizeUuid(uuid);
-  if (normalized.length === 4) return `0x${normalized.toUpperCase()}`;
-  return normalized || '-';
-}
-
-function normalizeUuidList(value) {
-  if (!value) return [];
-  const values = Array.isArray(value) ? value : String(value).split(/[\s,;]+/);
-  return values.map(normalizeUuid).filter(Boolean);
-}
-
 function numberOption(value, defaultValue, min = 0) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return defaultValue;
@@ -97,11 +71,7 @@ function numberOption(value, defaultValue, min = 0) {
 
 async function loadEsptool() {
   if (!esptoolPromise) {
-    esptoolPromise = (async () => {
-      const packagePath = require.resolve('esptool-js/package.json');
-      const bundlePath = path.join(path.dirname(packagePath), 'bundle.js');
-      return await import(pathToFileURL(bundlePath).href);
-    })();
+    esptoolPromise = import('esptool-js');
   }
   return await esptoolPromise;
 }
@@ -109,13 +79,6 @@ async function loadEsptool() {
 function loadSerialPortClass() {
   const serialport = require('serialport');
   return serialport.SerialPort || serialport;
-}
-
-function loadNoble() {
-  if (!nobleInstance) {
-    nobleInstance = require('@abandonware/noble');
-  }
-  return nobleInstance;
 }
 
 class EspSession {
@@ -390,10 +353,6 @@ function createFfsManagerCore(options = {}) {
         portPath: espSession.portPath,
         baudRate: espSession.baudRate,
         requestedBaudRate: espSession.requestedBaudRate
-      },
-      ble: {
-        loaded: !!nobleInstance,
-        state: nobleInstance?.state || 'not-loaded'
       }
     };
   }
@@ -683,126 +642,8 @@ function createFfsManagerCore(options = {}) {
     };
   }
 
-  function serializeBlePeripheral(peripheral) {
-    const advertisement = peripheral.advertisement || {};
-    return {
-      id: peripheral.id || peripheral.uuid || peripheral.address,
-      uuid: peripheral.uuid || '',
-      address: peripheral.address || '',
-      addressType: peripheral.addressType || '',
-      name: advertisement.localName || peripheral.name || 'Unknown device',
-      localName: advertisement.localName || '',
-      rssi: typeof peripheral.rssi === 'number' ? peripheral.rssi : null,
-      connectable: peripheral.connectable !== false,
-      serviceUuids: Array.isArray(advertisement.serviceUuids) ? advertisement.serviceUuids.map(displayUuid) : [],
-      manufacturerData: advertisement.manufacturerData ? bufferToHex(advertisement.manufacturerData) : '',
-      txPowerLevel: typeof advertisement.txPowerLevel === 'number' ? advertisement.txPowerLevel : null
-    };
-  }
-
-  async function waitForBlePoweredOn(noble, timeoutMs = 10000) {
-    if (noble.state === 'poweredOn') return noble.state;
-    if (['unsupported', 'unauthorized', 'poweredOff'].includes(noble.state)) {
-      throw new Error(`Bluetooth adapter is ${noble.state}`);
-    }
-
-    return await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        noble.removeListener('stateChange', onStateChange);
-        reject(new Error(`Bluetooth adapter did not become poweredOn within ${timeoutMs} ms; current state is ${noble.state || 'unknown'}`));
-      }, timeoutMs);
-
-      const onStateChange = state => {
-        if (state === 'poweredOn') {
-          clearTimeout(timer);
-          noble.removeListener('stateChange', onStateChange);
-          resolve(state);
-          return;
-        }
-        if (['unsupported', 'unauthorized', 'poweredOff'].includes(state)) {
-          clearTimeout(timer);
-          noble.removeListener('stateChange', onStateChange);
-          reject(new Error(`Bluetooth adapter is ${state}`));
-        }
-      };
-
-      noble.on('stateChange', onStateChange);
-    });
-  }
-
-function stopBleScan(noble) {
-  return Promise.race([new Promise(resolve => {
-    try {
-      let settled = false;
-      const done = () => {
-        if (settled) return;
-        settled = true;
-        resolve();
-      };
-      const maybePromise = noble.stopScanningAsync ? noble.stopScanningAsync() : noble.stopScanning(done);
-      if (maybePromise?.then) maybePromise.then(done, done);
-      else setTimeout(done, 50);
-    } catch {
-      resolve();
-    }
-  }), sleep(500).then(() => undefined)]);
-}
-
-  async function bleStatus() {
-    const noble = loadNoble();
-    return {
-      state: noble.state || 'unknown',
-      loaded: true
-    };
-  }
-
-  async function scanBle(options = {}) {
-    const noble = loadNoble();
-    const durationMs = numberOption(options.durationMs, 5000, 250);
-    const waitMs = numberOption(options.waitMs, 10000, 100);
-    const serviceUuids = normalizeUuidList(options.serviceUuids || options.service || options.services);
-    const allowDuplicates = options.allowDuplicates === true;
-    const devices = new Map();
-
-    await waitForBlePoweredOn(noble, waitMs);
-
-    const onDiscover = peripheral => {
-      const device = serializeBlePeripheral(peripheral);
-      if (!device.id) return;
-      devices.set(device.id, device);
-      emit('bleDevice', device);
-    };
-
-    noble.on('discover', onDiscover);
-    try {
-      if (noble.startScanningAsync) {
-        await noble.startScanningAsync(serviceUuids, allowDuplicates);
-      } else {
-        await new Promise((resolve, reject) => {
-          noble.startScanning(serviceUuids, allowDuplicates, error => (error ? reject(error) : resolve()));
-        });
-      }
-      emit('bleScanStart', { serviceUuids, allowDuplicates });
-      await sleep(durationMs);
-    } finally {
-      noble.removeListener('discover', onDiscover);
-      await stopBleScan(noble);
-      emit('bleScanStop', {});
-    }
-
-    return {
-      state: noble.state || 'unknown',
-      durationMs,
-      serviceUuids,
-      devices: Array.from(devices.values()).sort((a, b) => (b.rssi ?? -999) - (a.rssi ?? -999))
-    };
-  }
-
   async function cleanup() {
     try { await release({ hardReset: true }); } catch {}
-    if (nobleInstance) {
-      try { await stopBleScan(nobleInstance); } catch {}
-    }
     return { closing: true };
   }
 
@@ -834,10 +675,6 @@ function stopBleScan(noble) {
       case 'port.waitReady':
       case 'waitForPortReady':
         return await waitForPortReady(message);
-      case 'ble.status':
-        return await bleStatus();
-      case 'ble.scan':
-        return await scanBle(message);
       case 'shutdown':
         return await cleanup();
       default:
@@ -855,8 +692,6 @@ function stopBleScan(noble) {
     erasePartition,
     release,
     waitForPortReady,
-    bleStatus,
-    scanBle,
     cleanup,
     executeAction,
     parsePartitionTable

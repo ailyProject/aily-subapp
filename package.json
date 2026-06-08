@@ -1,0 +1,11 @@
+{
+  "name": "@aily-project/aily-tools",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build-tools.mjs",
+    "build:tools": "node scripts/build-tools.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.5"
+  }
+}

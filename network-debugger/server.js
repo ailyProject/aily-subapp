@@ -56,10 +56,16 @@ function i18nPathFromRequest(requestPath) {
   return path.join(__dirname, 'i18n', match[1]);
 }
 
+function penpalVendorPath() {
+  const bundledPath = path.join(__dirname, 'vendor', 'penpal.min.js');
+  if (fs.existsSync(bundledPath)) return bundledPath;
+  return path.join(__dirname, 'node_modules', 'penpal', 'dist', 'penpal.min.js');
+}
+
 function serveStatic(uiRoot, request, response) {
   const requestUrl = new URL(request.url, 'http://127.0.0.1');
   if (requestUrl.pathname === '/vendor/penpal.min.js') {
-    serveFile(path.join(__dirname, 'node_modules', 'penpal', 'dist', 'penpal.min.js'), response);
+    serveFile(penpalVendorPath(), response);
     return;
   }
 
