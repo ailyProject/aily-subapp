@@ -42,10 +42,15 @@ function normalizeSerialOptions(options = {}) {
   };
 }
 
+function normalizePortPath(port = {}) {
+  return port.path || port.comName || port.port || port.name || port.friendlyName || '';
+}
+
 function serializePortInfo(port = {}) {
+  const portPath = normalizePortPath(port);
   return {
-    path: port.path,
-    name: port.friendlyName || port.path || '',
+    path: portPath,
+    name: port.friendlyName || port.name || portPath || '',
     manufacturer: port.manufacturer || '',
     serialNumber: port.serialNumber || '',
     vendorId: port.vendorId || '',

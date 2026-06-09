@@ -47,6 +47,7 @@
     "SEND": "发送",
     "RX": "RX",
     "TX": "TX",
+    "QUICK_SEND": "快捷发送",
     "TEXT_SAMPLE": "文本",
     "HEX_SAMPLE": "Hex 示例",
     "HOST_CONNECTION_FAILED": "宿主连接失败",

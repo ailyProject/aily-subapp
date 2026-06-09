@@ -47,6 +47,7 @@
     "SEND": "Send",
     "RX": "RX",
     "TX": "TX",
+    "QUICK_SEND": "Quick Send",
     "TEXT_SAMPLE": "Text",
     "HEX_SAMPLE": "Hex Sample",
     "HOST_CONNECTION_FAILED": "Host connection failed",

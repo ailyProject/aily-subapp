@@ -36,6 +36,10 @@
   let connectLoading = false;
   let sendLoading = false;
   let ports = [];
+  let showPortMenu = false;
+  let showBaudMenu = false;
+  let portPickerElement = null;
+  let baudPickerElement = null;
   let currentPort = '';
   let baudRate = '115200';
   let dataBits = '8';
@@ -45,6 +49,8 @@
   let showAdvanced = false;
   let rows = [];
   let searchKeyword = '';
+  let searchBoxVisible = false;
+  let searchMatchCount = 0;
   let inputValue = '';
   let rxBytes = 0;
   let txBytes = 0;
@@ -234,13 +240,82 @@
     localStorage.setItem(storageKey, JSON.stringify(payload));
   }
 
-  function selectedPortLabel() {
-    if (currentPort) return currentPort;
-    return ports.length ? t('SELECT_PORT', 'Select port') : t('NO_PORTS', 'No serial ports');
+  function selectedPortLabel(port, list) {
+    if (port) {
+      const selectedPort = list.find(item => portValue(item) === port);
+      return selectedPort ? portLabel(selectedPort) : port;
+    }
+    return list.length ? t('SELECT_PORT', 'Select port') : t('NO_PORTS', 'No serial ports');
+  }
+
+  function portValue(port = {}) {
+    return String(port.path || port.comName || port.port || port.name || '').trim();
   }
 
   function portLabel(port) {
-    return port.name && port.name !== port.path ? `${port.path} - ${port.name}` : port.path;
+    const value = portValue(port);
+    const name = String(port.friendlyName || port.name || '').trim();
+    return name && name !== value ? `${value} - ${name}` : value;
+  }
+
+  function normalizePortList(nextPorts = []) {
+    const seen = new Set();
+    return nextPorts
+      .map(port => ({ ...port, path: portValue(port) }))
+      .filter(port => {
+        if (!port.path || seen.has(port.path)) return false;
+        seen.add(port.path);
+        return true;
+      });
+  }
+
+  async function openPortMenu() {
+    if (connected || connectLoading) return;
+    showBaudMenu = false;
+    showPortMenu = true;
+    await refreshPorts();
+  }
+
+  function closePortMenu() {
+    showPortMenu = false;
+  }
+
+  function selectPort(value) {
+    currentPort = String(value || '').trim();
+    closePortMenu();
+    saveSettings();
+  }
+
+  function openBaudMenu() {
+    if (connected || connectLoading) return;
+    showPortMenu = false;
+    showBaudMenu = true;
+  }
+
+  function closeBaudMenu() {
+    showBaudMenu = false;
+  }
+
+  function selectBaud(value) {
+    baudRate = String(value || baudRate);
+    closeBaudMenu();
+    saveSettings();
+  }
+
+  function handleDocumentPointerDown(event) {
+    if (showPortMenu && portPickerElement && !portPickerElement.contains(event.target)) {
+      closePortMenu();
+    }
+    if (showBaudMenu && baudPickerElement && !baudPickerElement.contains(event.target)) {
+      closeBaudMenu();
+    }
+  }
+
+  function handleDocumentKeydown(event) {
+    if (event.key === 'Escape') {
+      closePortMenu();
+      closeBaudMenu();
+    }
   }
 
   function visibleText(row) {
@@ -265,6 +340,10 @@
     if (!keyword) return false;
     return `${row.dir} ${row.label || ''} ${visibleText(row)}`.toLowerCase().includes(keyword);
   }
+
+  $: searchMatchCount = searchKeyword.trim()
+    ? rows.reduce((count, row) => count + (rowMatches(row) ? 1 : 0), 0)
+    : 0;
 
   function request(method, params = {}, timeoutMs = 15000) {
     if (!backendWs || backendWs.readyState !== WebSocket.OPEN) {
@@ -454,9 +533,9 @@
   async function refreshPorts() {
     try {
       const result = await request('serial.list');
-      ports = Array.isArray(result.ports) ? result.ports : [];
+      ports = normalizePortList(Array.isArray(result.ports) ? result.ports : []);
       if (!currentPort && ports.length === 1) {
-        currentPort = ports[0].path;
+        currentPort = portValue(ports[0]);
         saveSettings();
       }
     } catch (error) {
@@ -599,8 +678,12 @@
     void loadI18n(hostContext.lang);
     connectHost();
     connectBackend();
+    document.addEventListener('pointerdown', handleDocumentPointerDown, true);
+    document.addEventListener('keydown', handleDocumentKeydown);
 
     return () => {
+      document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
+      document.removeEventListener('keydown', handleDocumentKeydown);
       for (const pending of pendingRequests.values()) {
         clearTimeout(pending.timeout);
         pending.reject(new Error('Serial debugger UI closed'));
@@ -613,155 +696,211 @@
 
 <div class="window-box">
   <div class="main-box">
-    <section class="settings">
-      <div class="line">
-        <label class="item port-item">
+    <section class="settings top-settings">
+      <div class="line settings-line">
+        <div class="item port-item" bind:this={portPickerElement}>
           <span class="title">{t('PORT', 'Port')}</span>
-          <span class="item-inner select-shell">
-            <select bind:value={currentPort} disabled={connected || connectLoading} on:change={saveScalarSettings}>
-              {#if !currentPort && ports.length}
-                <option value="">{t('SELECT_PORT', 'Select port')}</option>
+          <button type="button" class:disabled={connected || connectLoading} class:selected={showPortMenu} class="item-inner ccenter picker-trigger" on:click={openPortMenu} disabled={connected || connectLoading}>
+            <span class="value">{selectedPortLabel(currentPort, ports)}</span>
+            <span class="arrow-box"><i class:down={showPortMenu} class="fa-light fa-angle-right arrow"></i></span>
+          </button>
+          {#if showPortMenu}
+            <div class="picker-menu port-picker-menu">
+              {#if ports.length}
+                {#each ports as port}
+                  {@const value = portValue(port)}
+                  {#if value}
+                    <button type="button" class:active={value === currentPort} class="picker-menu-item" on:click={() => selectPort(value)}>
+                      <span>{portLabel(port)}</span>
+                    </button>
+                  {/if}
+                {/each}
+              {:else}
+                <button type="button" class="picker-menu-item disabled" disabled>{t('NO_PORTS', 'No serial ports')}</button>
               {/if}
-              {#if currentPort}
-                <option value={currentPort}>{currentPort}</option>
-              {/if}
-              {#each ports as port}
-                {#if port.path && port.path !== currentPort}
-                  <option value={port.path}>{portLabel(port)}</option>
-                {/if}
-              {/each}
-              {#if !ports.length && !currentPort}
-                <option value="">{t('NO_PORTS', 'No serial ports')}</option>
-              {/if}
-            </select>
-            <span class="value">{currentPort || (ports.length ? t('SELECT_PORT', 'Select port') : t('NO_PORTS', 'No serial ports'))}</span>
-            <span class="arrow-box"></span>
-          </span>
-        </label>
-
-        <label class="item">
-          <span class="title">{t('BAUD_RATE', 'Baud Rate')}</span>
-          <span class="item-inner select-shell">
-            <select bind:value={baudRate} disabled={connected || connectLoading} on:change={saveScalarSettings}>
-              {#each baudRates as item}
-                <option value={item}>{item}</option>
-              {/each}
-            </select>
-            <span class="value">{baudRate}</span>
-            <span class="arrow-box">v</span>
-          </span>
-        </label>
-
-        <button type="button" class="tb-btn" on:click={refreshPorts} title={t('REFRESH_PORTS', 'Refresh ports')}>
-          <i class="fa-light fa-rotate-right"></i><span>{t('REFRESH', 'Refresh')}</span>
-        </button>
-        <button type="button" class:active={showAdvanced} class="tb-btn iconish" on:click={() => (showAdvanced = !showAdvanced)} title={t('MORE_SETTINGS', 'More Settings')}>
-          <i class="fa-light fa-gear"></i>
-        </button>
-        <button type="button" class:on={connected} class="switch-control" on:click={toggleConnection} disabled={connectLoading} title={connected ? t('DISCONNECT', 'Disconnect') : t('CONNECT', 'Connect')}>
-          <span class="switch-track"><span class="switch-thumb"></span></span>
-        </button>
-        <span class:connected class:error={backendStatus === 'error'} class="status-pill">
-          {connected ? t('CONNECTED', 'Connected') : t(backendStatus.toUpperCase(), backendStatus)}
-        </span>
-      </div>
-
-      {#if showAdvanced}
-        <div class="advanced">
-          <label class="field compact">
-            <span>{t('DATA_BITS', 'Data Bits')}</span>
-            <select bind:value={dataBits} disabled={connected} on:change={saveScalarSettings}>
-              {#each dataBitOptions as item}<option value={item}>{item}</option>{/each}
-            </select>
-          </label>
-          <label class="field compact">
-            <span>{t('STOP_BITS', 'Stop Bits')}</span>
-            <select bind:value={stopBits} disabled={connected} on:change={saveScalarSettings}>
-              {#each stopBitOptions as item}<option value={item}>{item}</option>{/each}
-            </select>
-          </label>
-          <label class="field compact">
-            <span>{t('PARITY', 'Parity')}</span>
-            <select bind:value={parity} disabled={connected} on:change={saveScalarSettings}>
-              {#each parityOptions as item}<option value={item}>{t(`PARITY_${item.toUpperCase()}`, item)}</option>{/each}
-            </select>
-          </label>
-          <label class="field compact">
-            <span>{t('FLOW_CONTROL', 'Flow Control')}</span>
-            <select bind:value={flowControl} disabled={connected} on:change={saveScalarSettings}>
-              {#each flowControlOptions as item}<option value={item}>{t(`FLOW_${item.toUpperCase()}`, item)}</option>{/each}
-            </select>
-          </label>
-        </div>
-      {/if}
-    </section>
-
-    <section class="monitor">
-      <div class="r-box">
-        <div class="data-list" id="data-list">
-          {#if rows.length}
-            {#each rows as row (row.id)}
-              <div class:match={rowMatches(row)} class:no-time={!viewMode.showTimestamp} class:system={row.kind === 'system'} class={['data-row', row.dir.toLowerCase()].join(' ')}>
-                {#if viewMode.showTimestamp}
-                  <span class="time">{row.time}</span>
-                {/if}
-                <span class="dir">{row.dir}</span>
-                <code class:nowrap={!viewMode.autoWrap}>{visibleText(row) || ' '}</code>
-              </div>
-            {/each}
-          {:else}
-            <div class="empty">
-              <i class="fa-light fa-waveform-lines"></i>
-              <p>{t('EMPTY_LOG', 'Serial traffic will appear here')}</p>
             </div>
           {/if}
         </div>
 
-        <div class="monitor-toolbar">
-          <button type="button" class:active={viewMode.showHex} class="tb-btn toggle" on:click={() => toggleView('showHex')}>{t('HEX_DISPLAY', 'Hex')}</button>
-          <button type="button" class:active={viewMode.autoWrap} class="tb-btn toggle" on:click={() => toggleView('autoWrap')}>{t('AUTO_WRAP', 'Wrap')}</button>
-          <button type="button" class:active={viewMode.autoScroll} class="tb-btn toggle" on:click={() => toggleView('autoScroll')}>{t('AUTO_SCROLL', 'Tail')}</button>
-          <button type="button" class:active={viewMode.showTimestamp} class="tb-btn toggle" on:click={() => toggleView('showTimestamp')}>{t('TIMESTAMP', 'Time')}</button>
-          <button type="button" class:active={viewMode.showCtrlChar} class="tb-btn toggle" on:click={() => toggleView('showCtrlChar')}>{t('SHOW_CTRL_CHAR', 'Ctrl')}</button>
-          <label class="search-shell">
+        <div class="item baud-item" bind:this={baudPickerElement}>
+          <span class="title">{t('BAUD_RATE', 'Baud Rate')}</span>
+          <button type="button" class:disabled={connected || connectLoading} class:selected={showBaudMenu} class="item-inner ccenter picker-trigger" on:click={openBaudMenu} disabled={connected || connectLoading}>
+            <span class="value">{baudRate}</span>
+            <span class="arrow-box"><i class:down={showBaudMenu} class="fa-light fa-angle-right arrow"></i></span>
+          </button>
+          {#if showBaudMenu}
+            <div class="picker-menu baud-picker-menu">
+              {#each baudRates as item}
+                <button type="button" class:active={item === baudRate} class="picker-menu-item" on:click={() => selectBaud(item)}>
+                  <span>{item}</span>
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
+
+        <button type="button" class:actived={showAdvanced} class="setting-btn btn ccenter" on:click={() => (showAdvanced = !showAdvanced)} title={t('MORE_SETTINGS', 'More Settings')}>
+          {#if showAdvanced}
+            <i class="fa-light fa-xmark"></i>
+          {:else}
+            <i class="fa-light fa-gear"></i>
+          {/if}
+        </button>
+        <div class="switch">
+          <button type="button" class:on={connected} class="switch-control" on:click={toggleConnection} disabled={connectLoading} title={connected ? t('DISCONNECT', 'Disconnect') : t('CONNECT', 'Connect')}>
+            <span class="switch-track"><span class="switch-thumb"></span></span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    {#if showAdvanced}
+      <section class="settings more-settings">
+        <div class="line">
+          <label class="item">
+            <span class="title">{t('DATA_BITS', 'Data Bits')}</span>
+            <span class="item-inner ccenter select-shell">
+              <select bind:value={dataBits} disabled={connected} on:change={saveScalarSettings}>
+                {#each dataBitOptions as item}<option value={item}>{item}</option>{/each}
+              </select>
+              <span class="value">{dataBits}</span>
+              <span class="arrow-box"><i class="fa-light fa-angle-right arrow"></i></span>
+            </span>
+          </label>
+          <label class="item">
+            <span class="title">{t('STOP_BITS', 'Stop Bits')}</span>
+            <span class="item-inner ccenter select-shell">
+              <select bind:value={stopBits} disabled={connected} on:change={saveScalarSettings}>
+                {#each stopBitOptions as item}<option value={item}>{item}</option>{/each}
+              </select>
+              <span class="value">{stopBits}</span>
+              <span class="arrow-box"><i class="fa-light fa-angle-right arrow"></i></span>
+            </span>
+          </label>
+          <label class="item">
+            <span class="title">{t('PARITY', 'Parity')}</span>
+            <span class="item-inner ccenter select-shell">
+              <select bind:value={parity} disabled={connected} on:change={saveScalarSettings}>
+                {#each parityOptions as item}<option value={item}>{t(`PARITY_${item.toUpperCase()}`, item)}</option>{/each}
+              </select>
+              <span class="value">{t(`PARITY_${parity.toUpperCase()}`, parity)}</span>
+              <span class="arrow-box"><i class="fa-light fa-angle-right arrow"></i></span>
+            </span>
+          </label>
+          <label class="item flow-item">
+            <span class="title">{t('FLOW_CONTROL', 'Flow Control')}</span>
+            <span class="item-inner ccenter select-shell">
+              <select bind:value={flowControl} disabled={connected} on:change={saveScalarSettings}>
+                {#each flowControlOptions as item}<option value={item}>{t(`FLOW_${item.toUpperCase()}`, item)}</option>{/each}
+              </select>
+              <span class="value">{t(`FLOW_${flowControl.toUpperCase()}`, flowControl)}</span>
+              <span class="arrow-box"><i class="fa-light fa-angle-right arrow"></i></span>
+            </span>
+          </label>
+        </div>
+      </section>
+    {/if}
+
+    <section class="monitor">
+      <div class="r-box">
+        <div class="data-list sscroll" id="data-list">
+          {#if rows.length}
+            {#each rows as row (row.id)}
+              <div
+                class:highlight={rowMatches(row)}
+                class:search-active={rowMatches(row)}
+                class:no-time={!viewMode.showTimestamp}
+                class:system={row.kind === 'system'}
+                class:error={row.dir === 'ERR'}
+                class="item data-item"
+              >
+                {#if viewMode.showTimestamp}
+                  <span class="time">{row.time}</span>
+                  <span class:tx={row.dir === 'TX'} class:sys={row.dir === 'SYS'} class:error={row.dir === 'ERR'} class="dir">{row.dir}</span>
+                {/if}
+                <span class:tx={row.dir === 'TX'} class:sys={row.dir === 'SYS'} class:error={row.dir === 'ERR'} class:nowrap={!viewMode.autoWrap} class="data vsfont">{visibleText(row) || ' '}</span>
+              </div>
+            {/each}
+          {/if}
+        </div>
+
+        <div class="btns monitor-btns">
+          <button type="button" class:actived={viewMode.showHex} class="btn ccenter hex" on:click={() => toggleView('showHex')} title={t('HEX_DISPLAY', 'Hex')}>
+            <i class="fa-light fa-rectangle"></i>
+            <div>Hex</div>
+          </button>
+          <button type="button" class:actived={viewMode.autoWrap} class="btn ccenter" on:click={() => toggleView('autoWrap')} title={t('AUTO_WRAP', 'Wrap')}>
+            <i class="fa-light fa-arrow-turn-down-left"></i>
+          </button>
+          <button type="button" class:actived={viewMode.autoScroll} class="btn ccenter" on:click={() => toggleView('autoScroll')} title={t('AUTO_SCROLL', 'Tail')}>
+            <i class="fa-light fa-arrow-down-to-line"></i>
+          </button>
+          <button type="button" class:actived={viewMode.showTimestamp} class="btn ccenter" on:click={() => toggleView('showTimestamp')} title={t('TIMESTAMP', 'Time')}>
+            <i class="fa-light fa-timer"></i>
+          </button>
+          <button type="button" class:actived={viewMode.showCtrlChar} class="btn ccenter" on:click={() => toggleView('showCtrlChar')} title={t('SHOW_CTRL_CHAR', 'Ctrl')}>
+            <i class="fa-light fa-eye"></i>
+          </button>
+          <button type="button" class:actived={searchBoxVisible} class="btn ccenter right3" on:click={() => (searchBoxVisible = !searchBoxVisible)} title={t('SEARCH', 'Search')}>
+            <i class:actived={searchBoxVisible} class="fa-light fa-magnifying-glass"></i>
+          </button>
+          <button type="button" class="btn ccenter right2" on:click={exportLog} title={t('EXPORT', 'Export')}>
+            <i class="fa-light fa-download"></i>
+          </button>
+          <button type="button" class="btn ccenter right" on:click={clearLog} title={t('CLEAR', 'Clear')}>
+            <i class="fa-light fa-trash-can"></i>
+          </button>
+        </div>
+        {#if searchBoxVisible}
+          <label class="search-box">
             <i class="fa-light fa-magnifying-glass"></i>
             <input type="search" bind:value={searchKeyword} placeholder={t('SEARCH', 'Search')}>
+            <span class="result-count">{searchMatchCount}</span>
           </label>
-          <span class="spacer"></span>
-          <button type="button" class="tb-btn" on:click={exportLog}><i class="fa-light fa-download"></i><span>{t('EXPORT', 'Export')}</span></button>
-          <button type="button" class="tb-btn" on:click={clearLog}><i class="fa-light fa-trash-can"></i><span>{t('CLEAR', 'Clear')}</span></button>
-        </div>
+        {/if}
       </div>
     </section>
 
     <section class="sender">
-      <div class="quick-row">
-        {#each quickSends as item}
-          <button type="button" class:active={item.signal && signals[item.signal]} class="quick-btn" on:click={() => handleQuickSend(item)}>
-            {t(item.label, item.label)}
-          </button>
-        {/each}
-      </div>
-      <div class="input-box">
-        <textarea class="mono" bind:value={inputValue} on:keydown={handleInputKeydown} placeholder={t('INPUT_PLACEHOLDER', 'Enter data to send')}></textarea>
-        <div class="sender-toolbar">
-          <button type="button" class:active={inputMode.hexMode} class="tb-btn toggle" on:click={() => toggleInput('hexMode')}>{t('HEX_INPUT', 'Hex')}</button>
-          <button type="button" class:active={inputMode.sendByEnter} class="tb-btn toggle" on:click={() => toggleInput('sendByEnter')}>{t('SEND_BY_ENTER', 'Enter')}</button>
-          <button type="button" class:active={inputMode.endR} class="tb-btn toggle" on:click={() => toggleInput('endR')}>{t('END_R', '\\r')}</button>
-          <button type="button" class:active={inputMode.endN} class="tb-btn toggle" on:click={() => toggleInput('endN')}>{t('END_N', '\\n')}</button>
-          <span class="spacer"></span>
-          <button type="button" class="tb-btn primary" on:click={() => sendData()} disabled={!connected || sendLoading}>
-            <i class="fa-light fa-paper-plane"></i><span>{t('SEND', 'Send')}</span>
-          </button>
+      <div class="resize-line"></div>
+      <div class="s-box">
+        <div class="settings quick-settings">
+          <div class="quick-send-list">
+            <div class="quick-scroll sscroll">
+              <div class="quick-btns">
+                <div class="title">{t('QUICK_SEND', 'Quick Send')}</div>
+                {#each quickSends as item}
+                  <button type="button" class:actived={item.signal && signals[item.signal]} class={`item-btn ccenter ${item.type || ''}`} on:click={() => handleQuickSend(item)}>
+                    {t(item.label, item.label)}
+                  </button>
+                {/each}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="input-box">
+          <textarea class="sscroll vsfont" bind:value={inputValue} on:keydown={handleInputKeydown} placeholder={t('INPUT_PLACEHOLDER', 'Enter data to send')}></textarea>
+          <div class="btns sender-btns">
+            <button type="button" class:actived={inputMode.hexMode} class="btn ccenter hex" on:click={() => toggleInput('hexMode')} title={t('HEX_INPUT', 'Hex')}>
+              <i class="fa-light fa-rectangle"></i>
+              <div>Hex</div>
+            </button>
+            <button type="button" class:actived={inputMode.sendByEnter} class="btn ccenter enter" on:click={() => toggleInput('sendByEnter')} title={t('SEND_BY_ENTER', 'Enter')}>
+              <i class="fa-light fa-arrow-turn-down-left"></i>
+            </button>
+            <button type="button" class:actived={inputMode.endR} class="btn ccenter enter" on:click={() => toggleInput('endR')} title={t('END_R', '\\r')}>
+              <i class="fa-light fa-r"></i>
+            </button>
+            <button type="button" class:actived={inputMode.endN} class="btn ccenter enter" on:click={() => toggleInput('endN')} title={t('END_N', '\\n')}>
+              <i class="fa-light fa-n"></i>
+            </button>
+            <button type="button" class="btn right ccenter send-btn" on:click={() => sendData()} disabled={!connected || sendLoading} title={sendLoading ? t('SEND', 'Send') : (inputMode.sendByEnter ? 'Enter' : 'Ctrl+Enter')}>
+              <i class="fa-light fa-paper-plane"></i>
+            </button>
+          </div>
         </div>
       </div>
     </section>
-
-    <footer class="status-bar">
-      <span>{t('PORT', 'Port')}: <strong>{connected ? currentPort : t('DISCONNECTED', 'Disconnected')}</strong></span>
-      <span>{t('RX', 'RX')}: <strong>{formatBytes(rxBytes)}</strong></span>
-      <span>{t('TX', 'TX')}: <strong>{formatBytes(txBytes)}</strong></span>
-      <span>PID: <strong>{backendPid || '-'}</strong></span>
-    </footer>
   </div>
 </div>
