@@ -1,5 +1,5 @@
 {
-  "name": "@aily-project/{{tool-id}}-backend",
+  "name": "@aily-project/subapp-{{tool-id}}",
   "version": "0.1.0",
   "private": true,
   "description": "{{tool-description}} backend for Aily Blockly",

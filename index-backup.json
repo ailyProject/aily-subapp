@@ -29,6 +29,21 @@
     "requiredDependencies": ["ws", "penpal"],
     "installHint": "Run npm run install:network-debugger in the project root."
   },
+  "serial-debugger": {
+    "id": "serial-debugger",
+    "titleKey": "SERIAL_DEBUGGER.TITLE",
+    "namespace": "SERIAL_DEBUGGER",
+    "app": {
+      "name": "SERIAL_DEBUGGER.TITLE",
+      "description": "SERIAL_DEBUGGER.DESCRIPTION",
+      "icon": "fa-light fa-monitor-waveform",
+      "enabled": true
+    },
+    "childDir": "tools/serial-debugger",
+    "routePath": "/child-tool/serial-debugger",
+    "requiredDependencies": ["serialport", "ws", "penpal"],
+    "installHint": "Run npm run install:serial-debugger in the project root."
+  },
   "industrial-bus-debugger": {
     "id": "industrial-bus-debugger",
     "titleKey": "INDUSTRIAL_BUS_DEBUGGER.TITLE",

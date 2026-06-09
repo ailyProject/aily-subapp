@@ -1,0 +1,4 @@
+interface:
+  display_name: "Serial Device Debugger"
+  short_description: "Debug MCU UART and serial workflows."
+  default_prompt: "Use $serial-device-debugger to debug an MCU serial workflow."

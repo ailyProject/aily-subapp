@@ -200,6 +200,7 @@ textarea {
 
 .tabbar {
   display: flex;
+  align-items: flex-end;
   flex: 0 0 auto;
   gap: 4px;
   min-height: 38px;
@@ -222,6 +223,22 @@ textarea {
   color: var(--text);
   background: var(--panel);
   box-shadow: 0 -1px 0 var(--primary) inset;
+}
+
+.log-tab-button {
+  display: none;
+  width: 34px;
+  min-width: 34px;
+  margin-left: auto;
+  padding: 0;
+}
+
+.log-icon {
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+  background: currentColor;
+  box-shadow: 0 5px 0 currentColor, 0 10px 0 currentColor;
 }
 
 .tab-item {
@@ -279,22 +296,47 @@ textarea {
 .tab-page {
   display: grid;
   gap: 10px;
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   flex: 1;
   padding: 10px;
 }
 
 .scan-page {
-  grid-template-columns: minmax(260px, 0.9fr) minmax(260px, 1.1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.78fr);
+}
+
+.scan-page .log-panel {
+  grid-column: 2;
+  grid-row: 1;
 }
 
 .device-page {
-  grid-template-columns: minmax(260px, 0.9fr) minmax(300px, 1.1fr);
-  grid-template-rows: minmax(260px, 1fr) minmax(150px, 0.42fr);
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.72fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.device-page .gatt-panel {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.device-page .operation-panel {
+  grid-column: 1;
+  grid-row: 2;
 }
 
 .device-page .log-panel {
-  grid-column: 1 / -1;
+  grid-column: 2;
+  grid-row: 1 / 3;
+}
+
+.log-page {
+  grid-template-columns: 1fr;
+}
+
+.log-page .log-panel {
+  min-height: 0;
 }
 
 .panel {
@@ -604,28 +646,52 @@ textarea {
   display: flex;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 500px) {
   .tabbar {
     min-height: 36px;
     padding: 6px 8px 0;
   }
 
+  .log-tab-button {
+    display: inline-flex;
+  }
+
   .tab-page {
+    grid-template-columns: 1fr;
     padding: 8px;
   }
 
   .scan-page,
-  .device-page {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(220px, 0.8fr) minmax(180px, 0.55fr);
+  .log-page {
+    grid-template-rows: minmax(0, 1fr);
   }
 
   .device-page {
-    grid-template-rows: minmax(260px, 1fr) auto minmax(180px, 0.55fr);
+    grid-template-rows: minmax(260px, 1fr) auto;
   }
 
+  .scan-page .log-panel,
   .device-page .log-panel {
+    display: none;
+  }
+
+  .device-page .gatt-panel,
+  .device-page .operation-panel,
+  .log-page .log-panel {
     grid-column: 1;
+  }
+
+  .device-page .gatt-panel {
+    grid-row: 1;
+  }
+
+  .device-page .operation-panel {
+    grid-row: 2;
+  }
+
+  .log-page .log-panel {
+    display: flex;
+    grid-row: 1;
   }
 
   .field-row,

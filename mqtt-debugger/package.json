@@ -1,5 +1,5 @@
 {
-  "name": "@aily-project/mqtt-debugger-backend",
+  "name": "@aily-project/subapp-mqtt-debugger",
   "version": "0.1.0",
   "private": true,
   "description": "MQTT debugger backend for Aily Blockly",

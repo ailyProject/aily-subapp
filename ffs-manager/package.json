@@ -1,5 +1,5 @@
 {
-  "name": "@aily-project/ffs-manager-backend",
+  "name": "@aily-project/subapp-ffs-manager",
   "version": "0.1.0",
   "private": true,
   "description": "FFS manager child tool backend for Aily Blockly",

@@ -27,6 +27,7 @@ const backendRootFiles = new Set([
   'package-lock.json',
   'server.js'
 ]);
+const npmCommand = 'npm';
 
 function usage() {
   return [
@@ -87,6 +88,38 @@ async function pathExists(filePath) {
 
 async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, 'utf8'));
+}
+
+function runCommand(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: options.cwd,
+      env: options.env || process.env,
+      shell: process.platform === 'win32',
+      stdio: options.stdio || 'inherit'
+    });
+
+    child.on('error', reject);
+    child.on('exit', code => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(`${command} ${args.join(' ')} exited with code ${code}`));
+    });
+  });
+}
+
+async function runToolScriptIfPresent(toolDir, scriptName) {
+  const packagePath = path.join(toolDir, 'package.json');
+  if (!(await pathExists(packagePath))) return false;
+
+  const packageJson = await readJson(packagePath);
+  if (!packageJson.scripts?.[scriptName]) return false;
+
+  console.log(`[dev] running ${scriptName}`);
+  await runCommand(npmCommand, ['run', scriptName], { cwd: toolDir });
+  return true;
 }
 
 function hashText(text) {
@@ -305,6 +338,7 @@ function classifyChange(toolDir, filePath) {
   if (backendRootFiles.has(relative)) return 'backend';
   if (frontendTopLevelDirs.has(segments[0])) return 'frontend';
   if (segments[0] === 'skill') return '';
+  if (segments[0] === 'scripts') return 'frontend';
   if (relative.endsWith('.js') || relative.endsWith('.cjs') || relative.endsWith('.mjs')) {
     return 'backend';
   }
@@ -525,6 +559,11 @@ async function main() {
     }
 
     console.log(`[dev] frontend changed: ${Array.from(files).slice(0, 4).join(', ')}`);
+    if (Array.from(files).some(file => file.startsWith('ui/') || file.startsWith('scripts/'))) {
+      await runToolScriptIfPresent(tool.dir, 'build:ui').catch(error => {
+        console.error(`[dev] build:ui failed: ${error.message}`);
+      });
+    }
     reloadServer.broadcast('reload', {
       reason: 'frontend',
       time: Date.now()
@@ -575,6 +614,7 @@ async function main() {
   console.log(`[dev] dir: ${path.relative(rootDir, tool.dir).replace(/\\/g, '/')}`);
   console.log(`[dev] reload: ${reloadServer.url}`);
 
+  await runToolScriptIfPresent(tool.dir, 'build:ui');
   await startChild();
   await watcher.start();
   console.log('[dev] watching ui/i18n for reload and backend files for restart');

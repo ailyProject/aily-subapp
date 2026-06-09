@@ -163,6 +163,21 @@ function getRuntimeDependencies(project) {
   return runtimeDependencies;
 }
 
+function hasPackageScript(project, scriptName) {
+  return Boolean(project.packageJson?.scripts?.[scriptName]);
+}
+
+async function runPackageScriptWithArgs(project, scriptName, args = []) {
+  if (!hasPackageScript(project, scriptName)) return;
+
+  console.log(`  running ${scriptName}`);
+  await runCommand(
+    npmCommand,
+    ['run', scriptName, '--', ...args],
+    { cwd: project.dir }
+  );
+}
+
 function rewriteDistPackageJson(project) {
   const packageJson = project.packageJson;
   const runtimeDependencies = getRuntimeDependencies(project);
@@ -248,6 +263,54 @@ function selectProjects(projects, selectors) {
   return selected;
 }
 
+function childDirBaseName(entry) {
+  const childDir = String(entry?.childDir || '').replace(/\\/g, '/');
+  return childDir.split('/').filter(Boolean).pop() || null;
+}
+
+function indexEntryMatchesProject(key, entry, project) {
+  return (
+    key === project.id ||
+    entry?.id === project.id ||
+    childDirBaseName(entry) === project.id
+  );
+}
+
+function namespaceFromProjectId(projectId) {
+  return projectId
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toUpperCase();
+}
+
+function createFallbackIndexEntry(project) {
+  const namespace = namespaceFromProjectId(project.id);
+  const dependencies = Object.keys(project.packageJson.dependencies || {});
+
+  return {
+    id: project.id,
+    titleKey: `${namespace}.TITLE`,
+    namespace,
+    app: {
+      name: `${namespace}.TITLE`,
+      description: `${namespace}.DESCRIPTION`,
+      icon: 'fa-light fa-puzzle-piece',
+      enabled: true
+    },
+    childDir: `tools/${project.id}`,
+    routePath: `/child-tool/${project.id}`,
+    requiredDependencies: dependencies,
+    installHint: `Run npm run install:${project.id} in the project root.`
+  };
+}
+
+async function loadIndexTemplate() {
+  const indexBackupPath = path.join(rootDir, 'index-backup.json');
+  if (!(await pathExists(indexBackupPath))) return {};
+
+  return readJson(indexBackupPath);
+}
+
 async function copyIfExists(source, destination, label, warnings) {
   if (!(await pathExists(source))) {
     warnings.push(`Missing ${label}: ${toDisplayPath(source)}`);
@@ -257,6 +320,18 @@ async function copyIfExists(source, destination, label, warnings) {
   await mkdir(path.dirname(destination), { recursive: true });
   await cp(source, destination, { recursive: true });
   return true;
+}
+
+async function copyDirectoryContents(sourceDir, destinationDir) {
+  const entries = await readdir(sourceDir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const source = path.join(sourceDir, entry.name);
+    const destination = path.join(destinationDir, entry.name);
+
+    await rm(destination, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    await cp(source, destination, { recursive: true });
+  }
 }
 
 async function emptyDirectory(dir) {
@@ -503,6 +578,10 @@ async function minimizeRuntimeDependencies(packageDir) {
 
 async function copyRuntimeAssets(project, distDir, warnings) {
   for (const dirName of assetDirs) {
+    if (dirName === 'ui' && hasPackageScript(project, 'build:ui')) {
+      continue;
+    }
+
     const source = path.join(project.dir, dirName);
     const destination = path.join(distDir, dirName);
     if (await pathExists(source)) {
@@ -584,6 +663,10 @@ async function buildProject(project) {
   await writeRuntimePackage(project, packageDir);
   await installRuntimeDependencies(project, packageDir);
   await copyRuntimeAssets(project, packageDir, warnings);
+  await runPackageScriptWithArgs(project, 'build:ui', [
+    '--outdir',
+    path.join(packageDir, 'ui')
+  ]);
 
   return {
     project,
@@ -592,15 +675,62 @@ async function buildProject(project) {
   };
 }
 
+function createWorkspaceIndex(results, indexTemplate) {
+  const remainingResults = new Map(results.map(result => [result.project.id, result]));
+  const index = {};
+
+  for (const [key, entry] of Object.entries(indexTemplate)) {
+    const result = Array.from(remainingResults.values())
+      .find(item => indexEntryMatchesProject(key, entry, item.project));
+
+    if (!result) continue;
+
+    index[key] = entry;
+    remainingResults.delete(result.project.id);
+  }
+
+  for (const result of remainingResults.values()) {
+    index[result.project.id] = createFallbackIndexEntry(result.project);
+  }
+
+  return index;
+}
+
+async function publishWorkspaceDist(results) {
+  const workspaceDistDir = path.join(rootDir, 'dist');
+  assertWithin(rootDir, workspaceDistDir);
+  if (path.basename(workspaceDistDir) !== 'dist') {
+    throw new Error(`Unexpected workspace dist directory: ${workspaceDistDir}`);
+  }
+
+  await emptyDirectory(workspaceDistDir);
+
+  for (const result of results) {
+    const projectDistDir = path.join(result.project.dir, 'dist');
+    await copyDirectoryContents(projectDistDir, workspaceDistDir);
+  }
+
+  const indexTemplate = await loadIndexTemplate();
+  const workspaceIndex = createWorkspaceIndex(results, indexTemplate);
+  await writeFile(
+    path.join(workspaceDistDir, 'index.json'),
+    `${JSON.stringify(workspaceIndex, null, 2)}\n`,
+    'utf8'
+  );
+
+  return workspaceDistDir;
+}
+
 function printHelp() {
   console.log(`Usage: npm run build -- [project...]
 
-Build all tool projects with esbuild into each project's dist/<project> directory.
+Build all tool projects with esbuild into each project's dist/<project> directory,
+then publish the built tools and index.json into the workspace dist directory.
 
 Examples:
   npm run build
   npm run build -- ble-debugger
-  npm run build -- @aily-project/ble-debugger-backend`);
+  npm run build -- @aily-project/subapp-ble-debugger`);
 }
 
 async function main() {
@@ -629,6 +759,8 @@ async function main() {
     }
   }
 
+  const workspaceDistDir = await publishWorkspaceDist(results);
+  console.log(`Published workspace dist -> ${toDisplayPath(workspaceDistDir)}`);
   console.log(`Done. Built ${results.length} project(s).`);
 }
 

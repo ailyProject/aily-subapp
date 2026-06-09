@@ -1,0 +1,26 @@
+{
+  "name": "@aily-project/subapp-serial-debugger",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Serial debugger child tool backend for Aily Blockly",
+  "main": "index.js",
+  "bin": {
+    "aily-serial-debugger": "index.js"
+  },
+  "scripts": {
+    "start": "node index.js rpc",
+    "serve": "node index.js serve",
+    "build:ui": "node scripts/build-ui.mjs",
+    "cli": "node index.js",
+    "ports": "node index.js ports",
+    "status": "node index.js status"
+  },
+  "dependencies": {
+    "penpal": "^7.0.6",
+    "serialport": "^13.0.0",
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "svelte": "^5.0.0"
+  }
+}

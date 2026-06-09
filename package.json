@@ -8,6 +8,7 @@
     "dev:industrial-bus": "node scripts/dev-tool.mjs industrial-bus-debugger",
     "dev:mqtt": "node scripts/dev-tool.mjs mqtt-debugger",
     "dev:network": "node scripts/dev-tool.mjs network-debugger",
+    "dev:serial": "node scripts/dev-tool.mjs serial-debugger",
     "build": "node scripts/build-tools.mjs",
     "build:tools": "node scripts/build-tools.mjs"
   },

@@ -3,6 +3,7 @@
 const app = document.getElementById('app');
 const query = new URLSearchParams(window.location.search);
 const token = query.get('token') || '';
+const LOG_COMPACT_QUERY = '(max-width: 500px)';
 const host = {
   remote: null,
   context: {
@@ -64,6 +65,7 @@ let ws = null;
 let requestSeq = 0;
 const pendingRequests = new Map();
 let logSeq = 0;
+const logLayoutQuery = window.matchMedia ? window.matchMedia(LOG_COMPACT_QUERY) : null;
 
 document.documentElement.lang = host.context.lang;
 applyTheme(host.context.theme);
@@ -260,6 +262,10 @@ function canNotify(characteristic) {
   return hasProperty(characteristic, 'notify') || hasProperty(characteristic, 'indicate');
 }
 
+function isCompactLogLayout() {
+  return logLayoutQuery ? logLayoutQuery.matches : false;
+}
+
 function deviceTabId(deviceId) {
   return `device:${deviceId}`;
 }
@@ -431,6 +437,7 @@ function renderLogs() {
 
 function renderTabs() {
   const activeScan = state.activeTab === 'scan' ? ' active' : '';
+  const activeLog = state.activeTab === 'logs' ? ' active' : '';
 
   return `
     <div class="tabbar" role="tablist">
@@ -450,6 +457,9 @@ function renderTabs() {
         </div>
       `;
       }).join('')}
+      <button type="button" class="tab-button log-tab-button${activeLog}" data-action="switch-tab" data-tab="logs" role="tab" aria-selected="${state.activeTab === 'logs'}" aria-label="${attrText('LOG', 'Log')}" title="${attrText('LOG', 'Log')}">
+        <span class="log-icon" aria-hidden="true"></span>
+      </button>
     </div>
   `;
 }
@@ -494,6 +504,14 @@ function renderScanTab() {
   `;
 }
 
+function renderLogTab() {
+  return `
+    <div class="tab-page log-page" role="tabpanel">
+      ${renderLogPanel()}
+    </div>
+  `;
+}
+
 function renderDeviceTab(connection) {
   const connected = connection?.device;
   return `
@@ -526,14 +544,19 @@ function renderDeviceTab(connection) {
 
 function render() {
   const connection = activeConnection();
-  if (state.activeTab !== 'scan' && !connection) {
+  if (state.activeTab === 'logs' && !isCompactLogLayout()) {
     state.activeTab = 'scan';
+  }
+  if (state.activeTab !== 'scan' && !connection) {
+    if (state.activeTab !== 'logs') {
+      state.activeTab = 'scan';
+    }
   }
 
   app.className = `ble-debugger ${state.backendStatus === 'connecting' ? 'loading' : ''} ${state.backendStatus === 'error' ? 'failed' : ''}`;
   app.innerHTML = `
     ${renderTabs()}
-    ${state.activeTab !== 'scan' ? renderDeviceTab(activeConnection()) : renderScanTab()}
+    ${state.activeTab === 'logs' ? renderLogTab() : state.activeTab !== 'scan' ? renderDeviceTab(activeConnection()) : renderScanTab()}
 
     <div class="overlay">${state.backendStatus === 'error' ? text('UI_FAILED', 'BLE debugger backend connection failed') : text('UI_CONNECTING', 'Connecting BLE debugger...')}</div>
   `;
@@ -1000,7 +1023,9 @@ app.addEventListener('click', event => {
 
   if (action === 'switch-tab') {
     const tab = target.dataset.tab;
-    if (tab === 'device') {
+    if (tab === 'logs') {
+      state.activeTab = 'logs';
+    } else if (tab === 'device') {
       if (!connectionById(id)) return;
       state.activeTab = deviceTabId(id);
     } else {
@@ -1041,6 +1066,21 @@ app.addEventListener('click', event => {
 window.addEventListener('beforeunload', () => {
   if (ws) ws.close();
 });
+
+if (logLayoutQuery) {
+  const handleLogLayoutChange = () => {
+    if (!logLayoutQuery.matches && state.activeTab === 'logs') {
+      state.activeTab = 'scan';
+      render();
+    }
+  };
+
+  if (typeof logLayoutQuery.addEventListener === 'function') {
+    logLayoutQuery.addEventListener('change', handleLogLayoutChange);
+  } else if (typeof logLayoutQuery.addListener === 'function') {
+    logLayoutQuery.addListener(handleLogLayoutChange);
+  }
+}
 
 render();
 void loadI18n(host.context.lang);
