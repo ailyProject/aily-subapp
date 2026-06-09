@@ -10,7 +10,8 @@
   "scripts": {
     "start": "node index.js rpc",
     "serve": "node index.js serve",
-    "cli": "node index.js"
+    "cli": "node index.js",
+    "status": "node index.js status"
   },
   "dependencies": {
     "penpal": "^7.0.6",

@@ -2,7 +2,7 @@
 
 这个仓库用于维护 Aily Blockly 可加载的独立子应用工具。这里的“子应用”是一个独立 Node 项目：它自己启动本地 HTTP/WebSocket 服务，浏览器 UI 由 Aily Blockly 通过 iframe 加载，核心能力可以同时提供给 UI、CLI 和 AI 自动化流程。
 
-更完整的规范见 [tool-development-spec.md](tool-development-spec.md)，可复制模板见 [templates/subapp](templates/subapp)、[templates/subapp-angular](templates/subapp-angular)、[templates/subapp-vue](templates/subapp-vue)，现有工具和模板说明见 [subapp-development-template.md](subapp-development-template.md)。
+最新外部子应用开发提示词见 [subapp-development.md](subapp-development.md)，工程细节规范见 [tool-development-spec.md](tool-development-spec.md)。可复制模板见 [templates/subapp](templates/subapp)、[templates/subapp-angular](templates/subapp-angular)、[templates/subapp-vue](templates/subapp-vue)，现有工具和模板说明见 [subapp-development-template.md](subapp-development-template.md)。
 
 ## 什么时候做子应用
 
@@ -22,7 +22,6 @@
 ```text
 <tool-id>/
   package.json
-  package-lock.json
   index.js
   core.js
   cli.js
@@ -101,7 +100,7 @@ npm run dev -- sensor-debugger --port 18450 --reload-port 19450
 - `cli.js`: 解析命令行参数，调用 `core.js`，非 help 命令必须输出一个 JSON 对象。
 - `server.js`: 提供本地 HTTP 静态资源、`/ws` JSON-RPC、`/health`、`/api/shutdown` 和 token 校验。
 - `ui/`: 浏览器页面，不直接使用 Node/Electron API。
-- `i18n/`: 子应用自己的语言包，至少提供 `en.json` 和 `zh_cn.json`。
+- `i18n/`: 子应用自己的语言包，至少提供 `en.json`、`zh_cn.json`，建议同时提供 `zh_hk.json`。
 - `skill/`: 可选的 AI 工作流说明，建议同时保留 `SKILL.md` 和 `skill_zh.md`。
 
 不要把工具核心逻辑分散复制到 UI、CLI 和 HTTP 层。先把能力写进 `core.js`，再由 CLI 和 WebSocket RPC 调用它。
@@ -185,8 +184,9 @@ WebSocket 适合做：
 - 不直接 `require` Node 模块。
 - 没有父页面 Penpal host 时也能完成基础渲染和后端连接。
 - 从 `/i18n/<lang>.json` 加载语言包，缺失时回退到 `/i18n/en.json`。
-- 从 `ui/light.css` 或 `ui/dark.css` 加载主题。
-- `styles.css` 放布局、尺寸、状态等通用规则；`light.css` 和 `dark.css` 放颜色变量或主题覆盖。
+- 首屏先读取 URL `theme` 并应用主题；`setHostContext({ theme })` 到达后同步切换主题。
+- 纯静态 UI 推荐用 `styles.css` 放布局、尺寸、状态等通用规则，用 `light.css` 和 `dark.css` 放颜色变量或主题覆盖。
+- Angular、Vue、React、Vite 等框架 UI 不强制存在 `app.js`、`light.css` 或 `dark.css`；构建后的 `ui/index.html` 能正确引用 JS/CSS/assets，且视觉上能响应 light/dark 即可。
 
 语言包推荐结构：
 
@@ -292,8 +292,8 @@ node sensor-debugger/index.js serve --host 127.0.0.1 --port 0
 
 - stdout 输出 `ready` JSON。
 - `ready.url` 追加 `lang`、`theme` 后能打开 UI。
-- `/i18n/<lang>.json` 可加载，缺失语言能回退到 `en.json`。
-- `light.css` 和 `dark.css` 能正确切换。
+- `/i18n/<lang>.json` 和 `/tools/<tool-id>/i18n/<lang>.json` 可加载，缺失语言能回退到 `en.json`。
+- `theme=light` 和 `theme=dark` 都能呈现正确主题；框架构建 UI 不要求独立 `light.css` / `dark.css` 文件。
 - `/ws?token=...` 能连接并执行 `status`。
 
 构建检查：

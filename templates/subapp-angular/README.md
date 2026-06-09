@@ -25,6 +25,8 @@ node {{tool-id}}/index.js echo --message hello
 node {{tool-id}}/index.js serve --host 127.0.0.1 --port 0
 ```
 
+After replacing placeholders, run `npm install --prefix {{tool-id}}` if you want to generate or refresh a lockfile. `npm run build:ui --prefix {{tool-id}}` writes the deliverable browser UI to `dist/{{tool-id}}/ui`.
+
 From the `aily-tools` root:
 
 ```powershell
@@ -39,6 +41,6 @@ npm run build -- {{tool-id}}
 - `cli.js`: parses arguments and writes one JSON object for every non-help command.
 - `server.js`: serves the built Angular UI from `dist/{{tool-id}}/ui` in source mode, falls back to packaged `ui/`, exposes `/ws`, validates `token`, and handles `/health` plus `/api/shutdown`.
 - `scripts/build-ui.mjs`: builds Angular into the static UI output directory expected by `build-tools.mjs`.
-- `ui/`: Angular browser-only interface. It reads `token`, `lang`, and `theme` from the URL.
-- `i18n/`: child-tool language bundles.
+- `ui/`: Angular browser-only source. Built output may use generated JS/CSS names; only `ui/index.html` is fixed for the host.
+- `i18n/`: child-tool language bundles for `en`, `zh_cn`, and `zh_hk`; app metadata uses `TITLE` and `DESCRIPTION`.
 - `skill/`: optional AI workflow instructions for using this tool.

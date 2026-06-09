@@ -31,11 +31,8 @@
     zh_cn.json
     ...
   ui/
-    index.html
-    app.js
-    styles.css
-    light.css
-    dark.css
+    index.html      # required host entry
+    ... static files, framework bundles, or assets referenced by index.html
   skill/
     <skill-name>/
       SKILL.md
@@ -49,7 +46,7 @@
 - 服务只监听本机地址，并为每次启动生成或接收一个 `token`。
 - stdout 输出一行 `{"event":"ready","data":{...}}`，其中包含 `url`、`wsUrl`、`shutdownUrl`、`port`、`pid`。
 - UI 从 URL 读取 `token`、`lang`、`theme`，先完成基础渲染，再通过 WebSocket 调后端。
-- UI 通过 `/i18n/<lang>.json` 加载语言包，通过 `light.css` / `dark.css` 切换主题。
+- UI 通过 `/i18n/<lang>.json` 加载语言包，服务端同时兼容 `/tools/<tool-id>/i18n/<lang>.json`，并在首屏和 `setHostContext` 中响应 `theme`。
 - iframe 与宿主之间只用 Penpal 做控制面通信，例如 `childReady`、`childError`、`setHostContext`、`beforeClose`。
 - 高频数据、硬件事件、日志流、RPC 请求都走子应用自己的 `/ws?token=...`。
 
@@ -105,7 +102,7 @@ node --check <tool-id>/core.js
 node --check <tool-id>/cli.js
 node --check <tool-id>/server.js
 
-# 仅适用于 templates/subapp 纯 JS UI
+# 仅适用于 templates/subapp 纯 JS UI；Angular/Vue 等框架 UI 通过 build:ui 验证
 node --check <tool-id>/ui/app.js
 
 # 适用于 templates/subapp-angular 和 templates/subapp-vue
@@ -147,11 +144,11 @@ npm run build -- <tool-id>
 
 - 先明确工具边界：哪些能力放 `core.js`，哪些交互放 UI，哪些命令要暴露给 AI/脚本 CLI。
 - 创建工具目录并替换模板占位符。
-- 添加 `i18n/en.json` 和 `i18n/zh_cn.json`，后续再补齐其它 locale。
+- 添加 `i18n/en.json`、`i18n/zh_cn.json` 和 `i18n/zh_hk.json`，后续再补齐其它 locale。
 - 如果需要硬件或原生模块，把依赖放在子应用自己的 `package.json`，不要依赖根项目。
 - 在 `server.js` 中新增 RPC method 映射，在 `core.js` 中实现真实能力。
 - 在 `cli.js` 中为关键能力提供 JSON CLI。
 - UI 必须能在无父页面 Penpal host 的情况下独立打开和连接后端。
 - UI 新增可见字符串时同步更新语言包。
-- 修改主题时保持 `styles.css` 放布局，`light.css` / `dark.css` 放颜色变量。
+- 纯静态 UI 修改主题时推荐保持 `styles.css` 放布局、`light.css` / `dark.css` 放颜色变量；Angular/Vue 等框架 UI 可以使用构建产物、CSS variables、class 或 data attribute 实现主题。
 - 跑完语法检查、CLI 检查、serve 检查和构建检查，再接入主应用验证 iframe/Penpal 生命周期。

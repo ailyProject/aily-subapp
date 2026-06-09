@@ -11,6 +11,7 @@
     "start": "node index.js rpc",
     "serve": "node index.js serve",
     "cli": "node index.js",
+    "status": "node index.js status",
     "request": "node index.js request"
   },
   "dependencies": {

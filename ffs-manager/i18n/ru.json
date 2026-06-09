@@ -159,8 +159,6 @@
     "ERRORS": {
       "IMAGE_SIZE_MISMATCH": "Exported image size {{imageSize}} does not match partition size {{partitionSize}}"
     },
-    "DESCRIPTION": "Управление разделами файловой системы ESP Flash из изолированного дочернего инструмента.",
-    "CHILD_TITLE": "Менеджер FFS (автономный)",
-    "CHILD_DESCRIPTION": "Автономный менеджер FFS с дочерним процессом и noble BLE"
+    "DESCRIPTION": "Управление разделами файловой системы ESP Flash из изолированного дочернего инструмента."
   }
 }

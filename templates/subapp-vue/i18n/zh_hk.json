@@ -1,0 +1,21 @@
+{
+  "{{TOOL_NAMESPACE}}": {
+    "TITLE": "{{Tool Name}}",
+    "DESCRIPTION": "{{tool-description}}",
+    "COMMAND": "命令",
+    "MESSAGE": "訊息",
+    "RUN": "執行",
+    "CLEAR": "清空",
+    "RESULT": "結果",
+    "LOG": "日誌",
+    "STATUS_CONNECTING": "連接中",
+    "STATUS_READY": "就緒",
+    "STATUS_CLOSED": "已關閉",
+    "STATUS_ERROR": "錯誤",
+    "BACKEND_READY": "後端就緒",
+    "HOST_CONNECTION_FAILED": "宿主連接失敗",
+    "ECHO_REQUEST": "Echo 請求",
+    "ECHO_RESPONSE": "Echo 回應",
+    "ECHO_FAILED": "Echo 失敗"
+  }
+}

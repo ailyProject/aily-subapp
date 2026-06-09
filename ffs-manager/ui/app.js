@@ -100,7 +100,7 @@ async function loadI18n(lang) {
       const data = await response.json();
       i18n.lang = candidate;
       i18n.bundle = data.FFS_MANAGER || {};
-      document.title = t('CHILD_TITLE', t('TITLE', 'FFS Manager'));
+      document.title = t('TITLE', 'FFS Manager');
       state.statusText ||= t('STATUS.SELECT_PORT_REFRESH', 'Select an ESP32 serial port to refresh device info');
       state.filesystemStatusText ||= t('STATUS.FILESYSTEM_READY_HINT', 'Read the file list before managing partition contents');
       render();
