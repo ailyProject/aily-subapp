@@ -5,7 +5,7 @@ import { cp, mkdir, readdir, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const TOOL_ID = 'serial-debugger';
+const TOOL_ID = '{{tool-id}}';
 const toolDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const uiDir = path.join(toolDir, 'ui');
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';

@@ -1,0 +1,21 @@
+{
+  "{{TOOL_NAMESPACE}}": {
+    "TITLE": "{{Tool Name}}",
+    "DESCRIPTION": "{{tool-description}}",
+    "COMMAND": "Command",
+    "MESSAGE": "Message",
+    "RUN": "Run",
+    "CLEAR": "Clear",
+    "RESULT": "Result",
+    "LOG": "Log",
+    "STATUS_CONNECTING": "Connecting",
+    "STATUS_READY": "Ready",
+    "STATUS_CLOSED": "Closed",
+    "STATUS_ERROR": "Error",
+    "BACKEND_READY": "Backend ready",
+    "HOST_CONNECTION_FAILED": "Host connection failed",
+    "ECHO_REQUEST": "Echo request",
+    "ECHO_RESPONSE": "Echo response",
+    "ECHO_FAILED": "Echo failed"
+  }
+}

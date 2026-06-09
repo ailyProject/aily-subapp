@@ -1,0 +1,43 @@
+<main class="tool-shell">
+  <section class="toolbar">
+    <div class="title-block">
+      <h1>{{ title }}</h1>
+      <p>{{ descriptionText }}</p>
+    </div>
+    <span class="status" [class.ready]="backendStatus === 'ready'">{{ statusLabel }}</span>
+  </section>
+
+  <section class="workspace">
+    <form class="panel command-panel" (ngSubmit)="runEcho()">
+      <div class="panel-title">{{ t('COMMAND', 'Command') }}</div>
+      <label class="field">
+        <span>{{ t('MESSAGE', 'Message') }}</span>
+        <input type="text" name="message" [(ngModel)]="message">
+      </label>
+      <div class="actions">
+        <button class="primary" type="submit" [disabled]="backendStatus !== 'ready'">
+          {{ t('RUN', 'Run') }}
+        </button>
+        <button type="button" (click)="clearOutput()">
+          {{ t('CLEAR', 'Clear') }}
+        </button>
+      </div>
+    </form>
+
+    <section class="panel result-panel">
+      <div class="panel-title">{{ t('RESULT', 'Result') }}</div>
+      <pre class="mono">{{ result }}</pre>
+    </section>
+
+    <section class="panel log-panel">
+      <div class="panel-title">{{ t('LOG', 'Log') }}</div>
+      <div class="log-list">
+        <div class="log-row" *ngFor="let log of logs" [class]="log.type">
+          <span class="time">{{ log.time }}</span>
+          <span class="label">{{ t(log.label, log.label) }}</span>
+          <span class="detail mono">{{ log.detail }}</span>
+        </div>
+      </div>
+    </section>
+  </section>
+</main>

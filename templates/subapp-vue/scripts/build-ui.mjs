@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
 import { spawn } from 'node:child_process';
-import { cp, mkdir, readdir, rm, stat } from 'node:fs/promises';
+import { cp, mkdir, readdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const TOOL_ID = 'serial-debugger';
+const TOOL_ID = '{{tool-id}}';
 const toolDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const uiDir = path.join(toolDir, 'ui');
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
@@ -26,16 +26,6 @@ function parseArgs(argv) {
     options[key] = value;
   }
   return options;
-}
-
-async function pathExists(filePath) {
-  try {
-    await stat(filePath);
-    return true;
-  } catch (error) {
-    if (error?.code === 'ENOENT') return false;
-    throw error;
-  }
 }
 
 function assertWithin(parentDir, childPath) {
@@ -89,7 +79,7 @@ function runCommand(command, args, options = {}) {
 
 const options = parseArgs(process.argv.slice(2));
 const outdir = path.resolve(toolDir, options.outdir || path.join('dist', TOOL_ID, 'ui'));
-const buildRoot = path.join(toolDir, 'dist', '.angular-ui-build');
+const buildRoot = path.join(toolDir, 'dist', '.vue-ui-build');
 
 assertWithin(toolDir, outdir);
 assertWithin(toolDir, buildRoot);
@@ -100,17 +90,14 @@ await runCommand(npmCommand, [
   'run',
   'build',
   '--',
-  '--configuration',
-  'production',
-  '--base-href',
+  '--base',
   './',
-  '--output-path',
-  buildRoot
+  '--outDir',
+  buildRoot,
+  '--emptyOutDir'
 ], { cwd: uiDir });
 
-const browserDir = path.join(buildRoot, 'browser');
-const sourceDir = await pathExists(path.join(browserDir, 'index.html')) ? browserDir : buildRoot;
-await copyDirectoryContents(sourceDir, outdir);
+await copyDirectoryContents(buildRoot, outdir);
 await rm(buildRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 
-console.log(`Angular UI built -> ${path.relative(toolDir, outdir).replace(/\\/g, '/')}`);
+console.log(`Vue UI built -> ${path.relative(toolDir, outdir).replace(/\\/g, '/')}`);

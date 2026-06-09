@@ -1,0 +1,4 @@
+interface:
+  display_name: "{{Tool Name}}"
+  short_description: "{{tool-description}}"
+  default_prompt: "Use ${{tool-skill-name}} to debug a {{tool-id}} workflow."

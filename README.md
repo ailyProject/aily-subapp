@@ -2,7 +2,7 @@
 
 这个仓库用于维护 Aily Blockly 可加载的独立子应用工具。这里的“子应用”是一个独立 Node 项目：它自己启动本地 HTTP/WebSocket 服务，浏览器 UI 由 Aily Blockly 通过 iframe 加载，核心能力可以同时提供给 UI、CLI 和 AI 自动化流程。
 
-更完整的规范见 [tool-development-spec.md](tool-development-spec.md)，可复制模板见 [templates/subapp](templates/subapp)，现有工具和模板说明见 [subapp-development-template.md](subapp-development-template.md)。
+更完整的规范见 [tool-development-spec.md](tool-development-spec.md)，可复制模板见 [templates/subapp](templates/subapp)、[templates/subapp-angular](templates/subapp-angular)、[templates/subapp-vue](templates/subapp-vue)，现有工具和模板说明见 [subapp-development-template.md](subapp-development-template.md)。
 
 ## 什么时候做子应用
 
@@ -50,10 +50,15 @@
 
 ```powershell
 Copy-Item -Recurse templates/subapp sensor-debugger
-npm install --prefix sensor-debugger
 ```
 
-然后替换模板占位符：
+模板选择：
+
+- `templates/subapp`: 纯 HTML/CSS/JS UI，适合轻量工具。
+- `templates/subapp-angular`: Angular UI，结构参考 `serial-debugger/ui`，需要额外安装 `sensor-debugger/ui` 依赖。
+- `templates/subapp-vue`: Vue/Vite UI，需要额外安装 `sensor-debugger/ui` 依赖。
+
+复制后先替换模板占位符：
 
 | 占位符 | 示例 | 用途 |
 | --- | --- | --- |
@@ -66,9 +71,15 @@ npm install --prefix sensor-debugger
 
 替换 `{{tool-skill-name}}` 后，同步把 `skill/example-device-debugger/` 重命名为最终 skill 目录。
 
-启动开发模式：
+安装依赖并启动开发模式：
 
 ```powershell
+npm install --prefix sensor-debugger
+
+# 仅 Angular/Vue UI 模板需要
+npm install --prefix sensor-debugger/ui
+npm run build:ui --prefix sensor-debugger
+
 npm run dev -- sensor-debugger --open
 ```
 
@@ -240,12 +251,12 @@ npm run build
 
 - 自动发现根目录下带 `package.json` 的工具项目。
 - 使用 esbuild 打包 Node 入口。
-- 复制 `ui/`、`i18n/`、`skill/` 和 Penpal vendor。
+- 复制 `i18n/`、`skill/` 和 Penpal vendor；没有 `build:ui` 时复制 `ui/`，有 `build:ui` 时运行该脚本生成静态 UI。
 - 为原生运行时依赖保留必要安装内容。
 - 汇总所有工具到根目录 `dist/`。
 - 根据 `index-backup.json` 和当前构建结果生成 `dist/index.json`。
 
-如果工具需要 Vite、Svelte、React、Vue 等独立 UI 构建器，把构建脚本放在工具自己的 `package.json` 中，并保证最终 UI 产物进入构建目录的 `ui/`。
+如果工具需要 Angular、Vite、Svelte、React、Vue 等独立 UI 构建器，把 `build:ui` 放在工具自己的 `package.json` 中，并保证最终 UI 产物进入构建目录的 `ui/`。`build-tools.mjs` 发现 `build:ui` 后会跳过复制 UI 源码，改为调用该脚本输出静态 UI。
 
 ## 最小验证清单
 
@@ -256,7 +267,12 @@ node --check sensor-debugger/index.js
 node --check sensor-debugger/core.js
 node --check sensor-debugger/cli.js
 node --check sensor-debugger/server.js
+
+# 仅适用于 templates/subapp 纯 JS UI
 node --check sensor-debugger/ui/app.js
+
+# 适用于 templates/subapp-angular 和 templates/subapp-vue
+npm run build:ui --prefix sensor-debugger
 ```
 
 CLI 检查：
@@ -291,7 +307,7 @@ npm run build -- sensor-debugger
 ## 新工具开发顺序
 
 1. 确定工具 id、名称、图标、i18n namespace 和是否需要原生依赖。
-2. 从 `templates/subapp` 复制目录，替换占位符并重命名 skill 目录。
+2. 从 `templates/subapp`、`templates/subapp-angular` 或 `templates/subapp-vue` 复制目录，替换占位符并重命名 skill 目录。
 3. 在 `core.js` 中实现真实能力。
 4. 在 `cli.js` 中暴露关键命令，并保证 JSON 输出。
 5. 在 `server.js` 中添加 WebSocket RPC method 和事件广播。

@@ -1,0 +1,249 @@
+<main class="serial-monitor-shell" (click)="showPortList=false;showBaudList=false;showContextMenu=false">
+  <div class="window-box" (click)="$event.stopPropagation()">
+    <div class="main-box">
+      <section class="settings">
+        <div class="line">
+          <div class="item port-item">
+            <div class="title">{{ t('PORT', 'Port') }}</div>
+            <button type="button" class="item-inner ccenter" (click)="openPortList();$event.stopPropagation()">
+              <span class="value">{{ selectedPortLabel }}</span>
+              <span class="arrow-box">
+                <span class="arrow" [class.down]="showPortList">›</span>
+              </span>
+            </button>
+
+            @if (showPortList) {
+              <div class="dropdown-menu port-menu">
+                @if (loadingPorts) {
+                  <div class="menu-row muted">{{ t('REFRESH', 'Refresh') }}...</div>
+                }
+                @if (!loadingPorts && !portList.length) {
+                  <div class="menu-row muted">{{ t('NO_PORTS', 'No serial ports') }}</div>
+                }
+                @for (port of portList; track port.path) {
+                  <button type="button" class="menu-row port-row" (click)="selectPort(port);$event.stopPropagation()">
+                    <span>{{ portLabel(port) }}</span>
+                    @if (portMeta(port)) {
+                      <small>{{ portMeta(port) }}</small>
+                    }
+                  </button>
+                }
+              </div>
+            }
+          </div>
+
+          <div class="item baud-item">
+            <div class="title">{{ t('BAUD_RATE', 'Baud Rate') }}</div>
+            <button type="button" class="item-inner ccenter" (click)="openBaudList();$event.stopPropagation()">
+              <span class="value">{{ currentBaudRate }}</span>
+              <span class="arrow-box">
+                <span class="arrow" [class.down]="showBaudList">›</span>
+              </span>
+            </button>
+
+            @if (showBaudList) {
+              <div class="dropdown-menu baud-menu">
+                @for (item of baudList; track item.value) {
+                  <button type="button" class="menu-row" (click)="selectBaud(item);$event.stopPropagation()">
+                    {{ item.name }}
+                  </button>
+                }
+              </div>
+            }
+          </div>
+
+          <button
+            type="button"
+            class="setting-btn btn ccenter"
+            [title]="t('MORE_SETTINGS', 'More Settings')"
+            (click)="showMoreSettings=!showMoreSettings"
+          >
+            {{ showMoreSettings ? '×' : '⚙' }}
+          </button>
+
+          <button
+            type="button"
+            class="switch-control"
+            [class.on]="switchValue"
+            [disabled]="backendStatus !== 'ready' || connecting"
+            (click)="switchPort()"
+          >
+            <span></span>
+          </button>
+        </div>
+      </section>
+
+      @if (showMoreSettings) {
+        <section class="settings more-settings">
+          <div class="line wrap-line">
+            <label class="item">
+              <span class="title">{{ t('DATA_BITS', 'Data Bits') }}</span>
+              <select class="select-inner" [(ngModel)]="dataBits" (change)="applyAdvancedSettings()">
+                @for (item of dataBitsList; track item.value) {
+                  <option [value]="item.value">{{ item.name }}</option>
+                }
+              </select>
+            </label>
+            <label class="item">
+              <span class="title">{{ t('STOP_BITS', 'Stop Bits') }}</span>
+              <select class="select-inner" [(ngModel)]="stopBits" (change)="applyAdvancedSettings()">
+                @for (item of stopBitsList; track item.value) {
+                  <option [value]="item.value">{{ item.name }}</option>
+                }
+              </select>
+            </label>
+            <label class="item">
+              <span class="title">{{ t('PARITY', 'Parity') }}</span>
+              <select class="select-inner" [(ngModel)]="parity" (change)="applyAdvancedSettings()">
+                @for (item of parityList; track item.value) {
+                  <option [value]="item.value">{{ optionLabel('PARITY_', item) }}</option>
+                }
+              </select>
+            </label>
+            <label class="item">
+              <span class="title">{{ t('FLOW_CONTROL', 'Flow Control') }}</span>
+              <select class="select-inner wide" [(ngModel)]="flowControl" (change)="applyAdvancedSettings()">
+                @for (item of flowControlList; track item.value) {
+                  <option [value]="item.value">{{ optionLabel('FLOW_', item) }}</option>
+                }
+              </select>
+            </label>
+          </div>
+        </section>
+      }
+
+      @if (showChartBox) {
+        <section class="chart-box">
+          <canvas #chartCanvas></canvas>
+          @if (!hasChartData) {
+            <div class="chart-empty-state">
+              <span class="chart-icon">⌁</span>
+              <span>{{ t('NO_CHART_DATA', 'No data') }}</span>
+              <small>value,value,...</small>
+            </div>
+          }
+        </section>
+      }
+
+      <section class="monitor">
+        <div class="r-box">
+          <div class="data-list sscroll" #dataListBox (scroll)="onDataListScroll()">
+            @if (!dataList.length) {
+              <div class="empty-state">{{ t('EMPTY_LOG', 'Serial traffic will appear here') }}</div>
+            }
+            @for (item of dataList; track item.id; let index = $index) {
+              @if (viewMode.showTimestamp) {
+                <article
+                  class="data-item"
+                  [attr.data-row-index]="index"
+                  [class.highlight]="item.highlight"
+                  [class.search-active]="item.searchHighlight"
+                  (contextmenu)="onDataItemContextMenu($event, item)"
+                >
+                  <span class="time">{{ item.time }}</span>
+                  <span class="dir" [class.tx]="item.dir === 'TX'" [class.sys]="item.dir === 'SYS'">{{ item.dir }}</span>
+                  <span
+                    class="data vsfont"
+                    [class.tx]="item.dir === 'TX'"
+                    [class.sys]="item.dir === 'SYS'"
+                    [class.error]="item.isError"
+                    [class.nowrap]="!viewMode.autoWrap"
+                  >{{ renderDataText(item) }}</span>
+                </article>
+              } @else {
+                <span
+                  class="data vsfont bare-data"
+                  [attr.data-row-index]="index"
+                  [class.tx]="item.dir === 'TX'"
+                  [class.sys]="item.dir === 'SYS'"
+                  [class.error]="item.isError"
+                  [class.nowrap]="!viewMode.autoWrap"
+                  (contextmenu)="onDataItemContextMenu($event, item)"
+                >{{ renderDataText(item) }}</span>
+              }
+            }
+          </div>
+
+          <div class="btns">
+            <button type="button" class="btn ccenter hex" [title]="t('HEX_DISPLAY', 'Hex')" (click)="changeViewMode('showHex')" [class.actived]="viewMode.showHex">
+              <span class="rect-icon"></span><span class="hex-label">Hex</span>
+            </button>
+            <button type="button" class="btn ccenter" [title]="t('AUTO_WRAP', 'Wrap')" (click)="changeViewMode('autoWrap')" [class.actived]="viewMode.autoWrap">↵</button>
+            <button type="button" class="btn ccenter" [title]="t('AUTO_SCROLL', 'Tail')" (click)="changeViewMode('autoScroll')" [class.actived]="viewMode.autoScroll">⇣</button>
+            <button type="button" class="btn ccenter" [title]="t('TIMESTAMP', 'Time')" (click)="changeViewMode('showTimestamp')" [class.actived]="viewMode.showTimestamp">◴</button>
+            <button type="button" class="btn ccenter" [title]="t('SHOW_CTRL_CHAR', 'Ctrl')" (click)="changeViewMode('showCtrlChar')" [class.actived]="viewMode.showCtrlChar">◉</button>
+            <button type="button" class="btn ccenter right4" title="Chart" (click)="openChartBox()" [class.actived]="showChartBox">⌁</button>
+            <button type="button" class="btn ccenter right3" [title]="t('SEARCH', 'Search')" (click)="openSearchBox()" [class.actived]="showSearchBox">⌕</button>
+            <button type="button" class="btn ccenter right2" [title]="t('EXPORT', 'Export')" (click)="exportData()">⇩</button>
+            <button type="button" class="btn ccenter right" [title]="t('CLEAR', 'Clear')" (click)="clearView()">×</button>
+          </div>
+
+          @if (showSearchBox) {
+            <div class="search-box" (click)="$event.stopPropagation()">
+              <input type="text" placeholder="search keyword" [(ngModel)]="searchKeyword" (ngModelChange)="keywordChange($event)">
+              <span class="result-count">{{ filteredSearchStatus }}</span>
+              <button type="button" [disabled]="!searchResults.length" (click)="navigatePrev()">⌃</button>
+              <button type="button" [disabled]="!searchResults.length" (click)="navigateNext()">⌄</button>
+            </div>
+          }
+        </div>
+      </section>
+
+      <section class="sender" [style.height.px]="bottomHeight">
+        <div class="resize-line" (pointerdown)="startSenderResize($event)"></div>
+        <div class="s-box">
+          <section class="settings quick-send-shell">
+            <div class="quick-send-list">
+              <div class="quick-scroll">
+                <div class="quick-title">{{ t('QUICK_SEND', 'Quick Send') }}</div>
+                @for (item of quickSendList; track $index) {
+                  <button type="button" class="item-btn ccenter" [class.signal]="item.type === 'signal'" [class.text]="item.type === 'text'" [class.hex]="item.type === 'hex'" (click)="sendQuick(item)">
+                    {{ item.name }}
+                  </button>
+                }
+              </div>
+              <button type="button" class="btn setting ccenter" (click)="openQuickSendEditor()">
+                {{ showQuickSendEditor ? '×' : '✎' }}
+              </button>
+            </div>
+          </section>
+
+          <div class="input-box">
+            <textarea class="sscroll vsfont" [(ngModel)]="inputValue" (keydown)="onKeyDown($event)"></textarea>
+            <div class="btns">
+              <button type="button" class="btn ccenter hex" [title]="t('HEX_INPUT', 'Hex')" (click)="changeInputMode('hexMode')" [class.actived]="inputMode.hexMode">
+                <span class="rect-icon"></span><span class="hex-label">Hex</span>
+              </button>
+              <button type="button" class="btn ccenter enter" [title]="t('SEND_BY_ENTER', 'Enter')" (click)="changeInputMode('sendByEnter')" [class.actived]="inputMode.sendByEnter">↵</button>
+              <button type="button" class="btn ccenter enter" [title]="t('END_R', '\\r')" (click)="changeInputMode('endR')" [class.actived]="inputMode.endR">R</button>
+              <button type="button" class="btn ccenter enter" [title]="t('END_N', '\\n')" (click)="changeInputMode('endN')" [class.actived]="inputMode.endN">N</button>
+              <button type="button" class="btn right ccenter" [title]="inputMode.sendByEnter ? 'Enter' : 'Ctrl+Enter'" (click)="send()">➤</button>
+            </div>
+          </div>
+
+          @if (showQuickSendEditor) {
+            <section class="quick-send-editor">
+              <div class="editor-content">
+                <textarea class="vsfont sscroll" [(ngModel)]="quickSendEditorValue"></textarea>
+              </div>
+              <div class="editor-footer">
+                @if (quickSendEditorError) {
+                  <span class="editor-error">{{ quickSendEditorError }}</span>
+                }
+                <button type="button" class="save-button" (click)="saveQuickSendEditor()">Save</button>
+              </div>
+            </section>
+          }
+        </div>
+      </section>
+    </div>
+  </div>
+
+  @if (showContextMenu && contextMenuItem) {
+    <div class="context-menu" [style.left.px]="contextMenuPosition.x" [style.top.px]="contextMenuPosition.y" (click)="$event.stopPropagation()">
+      <button type="button" (click)="copyContextItem()">Copy text</button>
+      <button type="button" (click)="toggleContextHex()">{{ contextMenuItem.showHex ? 'Text display' : 'Hex display' }}</button>
+      <button type="button" (click)="toggleContextHighlight()">{{ contextMenuItem.highlight ? 'Cancel highlight' : 'Highlight' }}</button>
+    </div>
+  }
+</main>

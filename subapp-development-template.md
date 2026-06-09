@@ -56,7 +56,7 @@
 根仓库脚本：
 
 - `npm run dev -- <tool-id>`：由 `scripts/dev-tool.mjs` 启动单个工具，注入 `lang/theme`，监听 `ui/`、`i18n/` 热刷新，后端文件变更后自动重启。
-- `npm run build -- <tool-id>`：由 `scripts/build-tools.mjs` 用 esbuild 打包 Node 入口，并复制 `ui`、`i18n`、`skill` 和 Penpal vendor。
+- `npm run build -- <tool-id>`：由 `scripts/build-tools.mjs` 用 esbuild 打包 Node 入口，并复制 `i18n`、`skill` 和 Penpal vendor；没有 `build:ui` 时复制 `ui`，有 `build:ui` 时运行该脚本生成静态 UI。
 
 ## 3. 开发模板
 
@@ -64,14 +64,14 @@
 
 ```text
 templates/subapp/
+templates/subapp-angular/
+templates/subapp-vue/
 ```
 
 使用方式：
 
 ```powershell
 Copy-Item -Recurse templates/subapp <tool-id>
-npm install --prefix <tool-id>
-npm run dev -- <tool-id> --open
 ```
 
 复制后全局替换这些占位符：
@@ -85,6 +85,18 @@ npm run dev -- <tool-id> --open
 | `{{tool_command}}` | `sensor` | CLI/bin 友好命令片段 |
 | `{{tool-skill-name}}` | `sensor-device-debugger` | skill 名称，复制后建议同步重命名 skill 子目录 |
 
+替换占位符后再安装依赖并启动：
+
+```powershell
+npm install --prefix <tool-id>
+
+# 仅 templates/subapp-angular 和 templates/subapp-vue 需要
+npm install --prefix <tool-id>/ui
+npm run build:ui --prefix <tool-id>
+
+npm run dev -- <tool-id> --open
+```
+
 最小验证：
 
 ```powershell
@@ -92,7 +104,12 @@ node --check <tool-id>/index.js
 node --check <tool-id>/core.js
 node --check <tool-id>/cli.js
 node --check <tool-id>/server.js
+
+# 仅适用于 templates/subapp 纯 JS UI
 node --check <tool-id>/ui/app.js
+
+# 适用于 templates/subapp-angular 和 templates/subapp-vue
+npm run build:ui --prefix <tool-id>
 node <tool-id>/index.js --help
 node <tool-id>/index.js status
 node <tool-id>/index.js echo --message hello

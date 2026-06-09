@@ -25,11 +25,11 @@ Use the existing child-tool boundaries:
 - `serial-debugger/index.js` selects RPC, serve, or CLI mode.
 - `serial-debugger/core.js` owns `serialport` enumeration, connection, read/write, DTR/RTS/BRK signals, and status metadata.
 - `serial-debugger/server.js` serves the UI, hosts `/ws`, validates the token, maps RPC methods, and exposes `/health` plus `/api/shutdown`.
-- `serial-debugger/ui/App.svelte` renders serial settings, traffic logs, view toggles, quick sends, and text/HEX input.
-- `serial-debugger/dist/serial-debugger/ui/app.js` is compiled output. Do not hand-edit it unless you are deliberately patching generated code.
+- `serial-debugger/ui/src/app/app.ts`, `app.html`, and `src/styles.scss` render serial settings, traffic logs, view toggles, quick sends, and text/HEX input.
+- `serial-debugger/dist/serial-debugger/ui/` is Angular compiled output. Do not hand-edit it unless you are deliberately patching generated code.
 - `serial-debugger/i18n/*.json` owns visible child-tool strings. Update every locale file when adding visible UI text.
 
-Do not put serial hardware access in Angular or the browser UI. Hardware operations belong in `core.js`, static serving and RPC belong in `server.js`, and interaction state belongs in `ui/App.svelte`.
+Do not put serial hardware access in Angular or the browser UI. Hardware operations belong in `core.js`, static serving and RPC belong in `server.js`, and interaction state belongs in `ui/src/app/` plus `ui/src/styles.scss`.
 
 ## CLI Checks
 
@@ -75,7 +75,7 @@ When changing the Serial Debugger tool itself:
 - Put serial enumeration, open/close, read/write, and signal behavior in `core.js`.
 - Put static serving, token validation, WebSocket RPC, `/health`, and shutdown behavior in `server.js`.
 - Put CLI parsing and JSON output behavior in `cli.js`.
-- Put UI state, settings, logs, filters, quick sends, and export behavior in `ui/App.svelte`, then rebuild `dist/serial-debugger/ui/app.js`.
+- Put UI state, settings, logs, filters, quick sends, and export behavior in the Angular UI under `ui/src/`, then rebuild `dist/serial-debugger/ui/`.
 - Keep the JSON RPC contract stable unless UI, CLI, server, and host are updated together.
 
 ## Verification
@@ -92,7 +92,7 @@ node --check serial-debugger/index.js
 node --check serial-debugger/core.js
 node --check serial-debugger/cli.js
 node --check serial-debugger/server.js
-node --check serial-debugger/dist/serial-debugger/ui/app.js
+npm --prefix serial-debugger/ui run build
 npm run build -- serial-debugger
 ```
 

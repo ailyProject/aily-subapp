@@ -47,8 +47,8 @@ node serial-debugger/index.js signal --port COM3 --baud 115200 --dtr true
 - `core.js`：封装 `serialport`，负责枚举、连接、收发和信号控制。
 - `server.js`：提供本地 HTTP 静态服务、WebSocket RPC、token 校验、`/health` 和 `/api/shutdown`。
 - `cli.js`：命令行参数解析和 JSON 输出。
-- `ui/`：Svelte UI 源码和静态壳文件，使用 Penpal 接收宿主上下文，并通过 WebSocket 调后端。
-- `dist/serial-debugger/ui/`：Svelte 编译后的浏览器静态资源，由 `npm --prefix serial-debugger run build:ui` 或根目录 `npm run build -- serial-debugger` 生成。
+- `ui/`：Angular UI 工程，使用 Penpal 接收宿主上下文，并通过 WebSocket 调后端。
+- `dist/serial-debugger/ui/`：Angular 编译后的浏览器静态资源，由 `npm --prefix serial-debugger run build:ui` 或根目录 `npm run build -- serial-debugger` 生成。
 - `i18n/`：子应用多语言文案。
 - `skill/`：面向 AI 调试工作流的本地 skill。
 
@@ -64,7 +64,6 @@ node --check serial-debugger/core.js
 node --check serial-debugger/cli.js
 node --check serial-debugger/server.js
 npm --prefix serial-debugger run build:ui
-node --check serial-debugger/dist/serial-debugger/ui/app.js
 node serial-debugger/index.js --help
 node serial-debugger/index.js status
 node serial-debugger/index.js ports

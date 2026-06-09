@@ -535,7 +535,7 @@ child UI 应作为普通浏览器页面运行。
 - 长文本、UUID、日志等必须支持换行和滚动。
 - 控件布局应紧凑、可扫描，调试类工具避免营销式页面。
 
-如果需要构建器，可以在 child 工具内独立引入 Vite/React/Vue 等；但必须保证打包产物进入 `child/tools/<tool-id>/ui` 或 `dist/ui`，且 Electron `extraResources` 能复制。
+如果需要构建器，可以在 child 工具内独立引入 Angular/Vite/React/Vue 等；但必须提供工具级 `build:ui` 脚本，并保证打包产物进入 `child/tools/<tool-id>/ui` 或 `dist/<tool-id>/ui`。`templates/subapp-angular` 和 `templates/subapp-vue` 是参考实现：源码留在 `ui/`，编译产物进入 `dist/<tool-id>/ui`，最终发布包只带静态 UI。
 
 ## 9. i18n 规范
 
