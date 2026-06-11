@@ -185,7 +185,7 @@ function connectHost() {
       if (state.backendStatus === 'ready') notifyHostReady();
     })
     .catch(error => {
-      addLogs([{ direction: 'error', protocol: 'Host', summary: 'Host connection failed', detail: error.message || String(error) }]);
+      addLogs([{ direction: 'error', protocol: 'Host', summary: 'HOST_CONNECTION_FAILED', detail: localizedErrorMessage(error.message || String(error)) }]);
     });
 }
 
@@ -226,6 +226,143 @@ function labelText(label) {
   return escapeHtml(t(label, label));
 }
 
+function formatI18n(template, params = {}) {
+  return String(template).replace(/\{(\w+)\}/g, (_, key) => params[key] ?? '');
+}
+
+function translateLogKey(key, fallback, params = {}) {
+  return formatI18n(t(key, fallback), params);
+}
+
+function logSummaryText(summary) {
+  const value = String(summary || '');
+  let match = value.match(/^CAN TX ([0-9A-F]+) DLC=(\d+)$/);
+  if (match) return escapeHtml(translateLogKey('LOG_CAN_TX', 'CAN TX {id} DLC={dlc}', { id: match[1], dlc: match[2] }));
+
+  match = value.match(/^CAN RX ([0-9A-F]+) DLC=(\d+)$/);
+  if (match) return escapeHtml(translateLogKey('LOG_CAN_RX', 'CAN RX {id} DLC={dlc}', { id: match[1], dlc: match[2] }));
+
+  match = value.match(/^CAN ([0-9A-F]+) filtered$/);
+  if (match) return escapeHtml(translateLogKey('LOG_CAN_FILTERED', 'CAN {id} filtered', { id: match[1] }));
+
+  match = value.match(/^RS485 TX (\d+)B$/);
+  if (match) return escapeHtml(translateLogKey('LOG_RS485_TX', 'RS485 TX {bytes}B', { bytes: match[1] }));
+
+  match = value.match(/^RS485 RX (\d+)B$/);
+  if (match) return escapeHtml(translateLogKey('LOG_RS485_RX', 'RS485 RX {bytes}B', { bytes: match[1] }));
+
+  match = value.match(/^Modbus (RTU|TCP) TX FC([0-9A-F]+)$/);
+  if (match) return escapeHtml(translateLogKey('LOG_MODBUS_TX', 'Modbus {protocol} TX FC{functionCode}', { protocol: match[1], functionCode: match[2] }));
+
+  match = value.match(/^Modbus (RTU|TCP) RX FC([0-9A-F]+)$/);
+  if (match) return escapeHtml(translateLogKey('LOG_MODBUS_RX', 'Modbus {protocol} RX FC{functionCode}', { protocol: match[1], functionCode: match[2] }));
+
+  return labelText(value);
+}
+
+function logDetailText(detail) {
+  const value = String(detail || '');
+  if (!value) return '';
+
+  let match = value.match(/^(\d+) bytes required$/);
+  if (match) return escapeHtml(translateLogKey('DETAIL_BYTES_REQUIRED', '{bytes} bytes required', { bytes: match[1] }));
+
+  match = value.match(/^empty PDU$/);
+  if (match) return escapeHtml(translateLogKey('DETAIL_EMPTY_PDU', 'empty PDU'));
+
+  match = value.match(/^RTU frame too short$/);
+  if (match) return escapeHtml(translateLogKey('DETAIL_RTU_TOO_SHORT', 'RTU frame too short'));
+
+  match = value.match(/^TCP frame too short$/);
+  if (match) return escapeHtml(translateLogKey('DETAIL_TCP_TOO_SHORT', 'TCP frame too short'));
+
+  match = value.match(/^crc=ok$/);
+  if (match) return escapeHtml(translateLogKey('DETAIL_CRC_OK', 'crc=ok'));
+
+  match = value.match(/^crc=bad expected (.+)$/);
+  if (match) return escapeHtml(translateLogKey('DETAIL_CRC_BAD', 'crc=bad expected {expected}', { expected: match[1] }));
+
+  match = value.match(/^length=ok$/);
+  if (match) return escapeHtml(translateLogKey('DETAIL_LENGTH_OK', 'length=ok'));
+
+  match = value.match(/^length=bad header=(\d+) actual=(\d+)$/);
+  if (match) return escapeHtml(translateLogKey('DETAIL_LENGTH_BAD', 'length=bad header={header} actual={actual}', { header: match[1], actual: match[2] }));
+
+  match = value.match(/^protocol=(\d+)$/);
+  if (match) return escapeHtml(translateLogKey('DETAIL_PROTOCOL', 'protocol={protocol}', { protocol: match[1] }));
+
+  match = value.match(/^filter=pass$/);
+  if (match) return escapeHtml(translateLogKey('DETAIL_FILTER_PASS', 'filter=pass'));
+
+  match = value.match(/^filter=skip$/);
+  if (match) return escapeHtml(translateLogKey('DETAIL_FILTER_SKIP', 'filter=skip'));
+
+  match = value.match(/^remote frame, raw=(.+)$/);
+  if (match) return escapeHtml(translateLogKey('DETAIL_REMOTE_FRAME', 'remote frame, raw={raw}', { raw: match[1] }));
+
+  match = value.match(/^Request timed out: (.+)$/);
+  if (match) return escapeHtml(translateLogKey('DETAIL_REQUEST_TIMEOUT', 'Request timed out: {method}', { method: match[1] }));
+
+  match = value.match(/^(\d+) bit\/s, (CAN FD|Classic CAN), (filter=(?:pass|skip))$/);
+  if (match) {
+    return escapeHtml(translateLogKey('DETAIL_CAN_TX_SETTINGS', '{bitrate} bit/s, {mode}, {filter}', {
+      bitrate: match[1],
+      mode: t(match[2] === 'CAN FD' ? 'CAN_FD' : 'CLASSIC_CAN', match[2]),
+      filter: logDetailPlainText(match[3])
+    }));
+  }
+
+  match = value.match(/^data=(.+), raw=(.+)$/);
+  if (match) return escapeHtml(translateLogKey('DETAIL_DATA_RAW', 'data={data}, raw={raw}', { data: match[1], raw: match[2] }));
+
+  match = value.match(/^ascii="(.*)"$/);
+  if (match) return escapeHtml(translateLogKey('DETAIL_ASCII', 'ASCII="{ascii}"', { ascii: match[1] }));
+
+  match = value.match(/^(.+) (\d+), ([^,]+), ascii="(.*)"$/);
+  if (match) return escapeHtml(translateLogKey('DETAIL_RS485_TX_SETTINGS', '{port} {baud}, {serial}, ASCII="{ascii}"', { port: match[1], baud: match[2], serial: match[3], ascii: match[4] }));
+
+  match = value.match(/^unit=(\d+), address=(\d+), quantity=(\d+)$/);
+  if (match) return escapeHtml(translateLogKey('DETAIL_MODBUS_REQUEST', 'unit={unit}, address={address}, quantity={quantity}', { unit: match[1], address: match[2], quantity: match[3] }));
+
+  match = value.match(/^unit=(\d+), fc=(0x[0-9A-F]+), exception=(0x[0-9A-F]+), (.+)$/);
+  if (match) return escapeHtml(translateLogKey('DETAIL_MODBUS_EXCEPTION', 'unit={unit}, fc={functionCode}, exception={exception}, {check}', { unit: match[1], functionCode: match[2], exception: match[3], check: logDetailPlainText(match[4]) }));
+
+  match = value.match(/^unit=(\d+), (.+), byteCount=(\d+), data=([^,]+)(?:, registers=(.+))?$/);
+  if (match) {
+    return escapeHtml(translateLogKey(match[5] ? 'DETAIL_MODBUS_DATA_REGISTERS' : 'DETAIL_MODBUS_DATA', match[5] ? 'unit={unit}, {check}, byte count={byteCount}, data={data}, registers={registers}' : 'unit={unit}, {check}, byte count={byteCount}, data={data}', {
+      unit: match[1],
+      check: logDetailPlainText(match[2]),
+      byteCount: match[3],
+      data: match[4],
+      registers: match[5] || ''
+    }));
+  }
+
+  match = value.match(/^unit=(\d+), (.+), address=(\d+), value=(\d+)$/);
+  if (match) return escapeHtml(translateLogKey('DETAIL_MODBUS_ADDRESS_VALUE', 'unit={unit}, {check}, address={address}, value={value}', { unit: match[1], check: logDetailPlainText(match[2]), address: match[3], value: match[4] }));
+
+  return escapeHtml(t(value, value));
+}
+
+function logDetailPlainText(detail) {
+  const html = logDetailText(detail);
+  const element = document.createElement('textarea');
+  element.innerHTML = html;
+  return element.value;
+}
+
+function localizedErrorMessage(message) {
+  const value = String(message || '');
+  const map = {
+    'WebSocket is not connected': 'ERROR_WS_NOT_CONNECTED',
+    'Backend reconnecting': 'ERROR_BACKEND_RECONNECTING',
+    'Industrial bus request failed': 'ERROR_REQUEST_FAILED',
+    'Backend WebSocket connection failed': 'ERROR_BACKEND_WS_FAILED',
+    'Clipboard failed': 'ERROR_CLIPBOARD_FAILED'
+  };
+  return map[value] || value;
+}
+
 function now() {
   return new Date().toLocaleTimeString();
 }
@@ -251,17 +388,19 @@ function optionList(values, selected) {
 function renderTabs() {
   return `
     <div class="mode-tabs">
-      <button type="button" data-action="set-mode" data-mode="can" class="${state.mode === 'can' ? 'active' : ''}"><span>${text('CAN', 'CAN')}</span></button>
-      <button type="button" data-action="set-mode" data-mode="rs485" class="${state.mode === 'rs485' ? 'active' : ''}"><span>${text('RS485', 'RS485')}</span></button>
-      <button type="button" data-action="set-mode" data-mode="modbus" class="${state.mode === 'modbus' ? 'active' : ''}"><span>${text('MODBUS', 'Modbus')}</span></button>
+      <div class="mode-tab-list" role="tablist" aria-label="${text('PROTOCOL', 'Protocol')}">
+        <button type="button" role="tab" aria-selected="${state.mode === 'can'}" data-action="set-mode" data-mode="can" class="${state.mode === 'can' ? 'active' : ''}"><span>${text('CAN', 'CAN')}</span></button>
+        <button type="button" role="tab" aria-selected="${state.mode === 'rs485'}" data-action="set-mode" data-mode="rs485" class="${state.mode === 'rs485' ? 'active' : ''}"><span>${text('RS485', 'RS485')}</span></button>
+        <button type="button" role="tab" aria-selected="${state.mode === 'modbus'}" data-action="set-mode" data-mode="modbus" class="${state.mode === 'modbus' ? 'active' : ''}"><span>${text('MODBUS', 'Modbus')}</span></button>
+      </div>
     </div>
   `;
 }
 
 function renderCan() {
   return `
-    <div class="debugger-grid">
-      <section class="panel form-panel">
+    <div class="workspace-grid debugger-grid">
+      <section class="panel form-panel primary-panel">
         <div class="panel-title">${text('CAN_SETTINGS', 'CAN Settings')}</div>
         <div class="field-grid">
           <label class="field"><span>${text('BITRATE', 'Bitrate')}</span><select data-field="canBitrate">${optionList(canBitrates, state.canBitrate)}</select></label>
@@ -287,7 +426,7 @@ function renderCan() {
         </div>
         <div class="actions"><button type="button" class="primary" data-action="can-send">${text('SEND_FRAME', 'Send frame')}</button></div>
       </section>
-      <section class="panel form-panel">
+      <section class="panel form-panel secondary-panel">
         <div class="panel-title">${text('PARSE_TRACE', 'Parse trace')}</div>
         <label class="field grow"><span>${text('TRACE_INPUT', 'Trace input')}</span><textarea class="mono body-input" data-field="canTraceInput" rows="12" placeholder="123#DEADBEEF">${escapeHtml(state.canTraceInput)}</textarea></label>
         <div class="actions"><button type="button" class="primary" data-action="can-parse">${text('PARSE_TRACE', 'Parse trace')}</button></div>
@@ -299,8 +438,8 @@ function renderCan() {
 
 function renderRs485() {
   return `
-    <div class="debugger-grid">
-      <section class="panel form-panel">
+    <div class="workspace-grid debugger-grid">
+      <section class="panel form-panel primary-panel">
         <div class="panel-title">${text('RS485_SETTINGS', 'RS485 Settings')}</div>
         <div class="field-grid">
           <label class="field"><span>${text('PORT_LABEL', 'Port')}</span><input type="text" data-field="rs485Port" value="${escapeAttr(state.rs485Port)}" placeholder="COM3"></label>
@@ -319,7 +458,7 @@ function renderRs485() {
         <label class="field grow"><span>${text('PAYLOAD', 'Payload')}</span><textarea class="mono body-input" data-field="rs485Payload" rows="7">${escapeHtml(state.rs485Payload)}</textarea></label>
         <div class="actions"><button type="button" class="primary" data-action="rs485-send">${text('SEND_RS485', 'Send RS485')}</button></div>
       </section>
-      <section class="panel form-panel">
+      <section class="panel form-panel secondary-panel">
         <div class="panel-title">${text('RECEIVE_INPUT', 'Receive input')}</div>
         <label class="field grow"><span>${text('PAYLOAD', 'Payload')}</span><textarea class="mono body-input" data-field="rs485ReceiveInput" rows="14">${escapeHtml(state.rs485ReceiveInput)}</textarea></label>
         <div class="actions"><button type="button" class="primary" data-action="rs485-rx">${text('RECORD_RX', 'Record RX')}</button></div>
@@ -331,8 +470,8 @@ function renderRs485() {
 
 function renderModbus() {
   return `
-    <div class="debugger-grid">
-      <section class="panel form-panel">
+    <div class="workspace-grid debugger-grid">
+      <section class="panel form-panel primary-panel">
         <div class="panel-title">${text('MODBUS_SETTINGS', 'Modbus Settings')}</div>
         <div class="field-grid">
           <label class="field"><span>${text('PROTOCOL', 'Protocol')}</span><select data-field="modbusProtocol">
@@ -357,7 +496,7 @@ function renderModbus() {
           <pre class="mono">${escapeHtml(state.modbusRequestHex || '-')}</pre>
         </div>
       </section>
-      <section class="panel form-panel">
+      <section class="panel form-panel secondary-panel">
         <div class="panel-title">${text('PARSE_RESPONSE', 'Parse response')}</div>
         <label class="field grow"><span>${text('RESPONSE_HEX', 'Response HEX')}</span><textarea class="mono body-input" data-field="modbusResponseHex" rows="14">${escapeHtml(state.modbusResponseHex)}</textarea></label>
         <div class="actions"><button type="button" class="primary" data-action="modbus-parse">${text('PARSE_RESPONSE', 'Parse response')}</button></div>
@@ -372,15 +511,15 @@ function renderLogPanel() {
     <section class="panel log-panel">
       <div class="panel-title">
         <span>${text('LOG', 'Log')}</span>
-        <button type="button" data-action="clear-logs">${text('CLEAR', 'Clear')}</button>
+        <button type="button" class="icon-action" title="${text('CLEAR', 'Clear')}" aria-label="${text('CLEAR', 'Clear')}" data-action="clear-logs">×</button>
       </div>
       <div class="log-list">
         ${state.logs.map(log => `
           <div class="log-row ${escapeAttr(log.direction)}">
             <span class="time">${escapeHtml(log.time)}</span>
             <span class="protocol">${escapeHtml(log.protocol)}</span>
-            <span class="summary">${labelText(log.summary)}</span>
-            ${log.detail ? `<span class="detail">${escapeHtml(log.detail)}</span>` : '<span></span>'}
+            <span class="summary">${logSummaryText(log.summary)}</span>
+            ${log.detail ? `<span class="detail">${logDetailText(log.detail)}</span>` : '<span></span>'}
             ${log.hex ? `<code class="hex">${escapeHtml(log.hex)}</code>` : '<span></span>'}
           </div>
         `).join('')}
@@ -389,11 +528,29 @@ function renderLogPanel() {
   `;
 }
 
-function render() {
+function captureScrollState() {
+  return {
+    workspace: app.querySelector('.debugger-grid')?.scrollTop || 0,
+    log: app.querySelector('.log-list')?.scrollTop || 0
+  };
+}
+
+function restoreScrollState(scrollState) {
+  if (!scrollState) return;
+  const workspace = app.querySelector('.debugger-grid');
+  const logList = app.querySelector('.log-list');
+  if (workspace) workspace.scrollTop = scrollState.workspace;
+  if (logList) logList.scrollTop = scrollState.log;
+}
+
+function render(options = {}) {
+  const preserveScroll = options.preserveScroll !== false;
+  const scrollState = preserveScroll ? captureScrollState() : null;
   app.innerHTML = `
     ${renderTabs()}
     ${state.mode === 'can' ? renderCan() : state.mode === 'rs485' ? renderRs485() : renderModbus()}
   `;
+  restoreScrollState(scrollState);
 }
 
 function updateFromInputs() {
@@ -479,6 +636,7 @@ function handleBackendMessage(raw) {
   if (message.event === 'ready') {
     state.backendStatus = 'ready';
     state.backendPid = Number(message.data?.pid) || 0;
+    render();
     notifyHostReady();
   }
 }
@@ -504,9 +662,11 @@ function connectBackend() {
       const status = await request('status');
       state.backendStatus = 'ready';
       state.backendPid = Number(status.pid) || state.backendPid;
+      render();
       notifyHostReady();
     } catch (error) {
       state.backendStatus = 'error';
+      render();
       notifyHostError(error);
     }
   });
@@ -521,10 +681,12 @@ function connectBackend() {
 
   backendWs.addEventListener('close', () => {
     if (state.backendStatus !== 'error') state.backendStatus = 'closed';
+    render();
   });
 
   backendWs.addEventListener('error', () => {
     state.backendStatus = 'error';
+    render();
     notifyHostError(new Error('Backend WebSocket connection failed'));
   });
 }
@@ -537,7 +699,7 @@ async function runAction(method) {
     }
     addLogs(result.logs || []);
   } catch (error) {
-    addLogs([{ direction: 'error', protocol: 'Backend', summary: error.message || 'Backend error' }]);
+    addLogs([{ direction: 'error', protocol: 'Backend', summary: 'BACKEND_ERROR', detail: localizedErrorMessage(error.message || 'Backend error') }]);
   }
 }
 
@@ -551,7 +713,7 @@ async function copyModbusRequest() {
     await navigator.clipboard?.writeText(state.modbusRequestHex);
     addLogs([{ direction: 'sys', protocol: 'Modbus', summary: 'COPIED', hex: state.modbusRequestHex }]);
   } catch (error) {
-    addLogs([{ direction: 'error', protocol: 'Modbus', summary: error.message || 'Clipboard failed', hex: state.modbusRequestHex }]);
+    addLogs([{ direction: 'error', protocol: 'Modbus', summary: 'CLIPBOARD_FAILED', detail: localizedErrorMessage(error.message || 'Clipboard failed'), hex: state.modbusRequestHex }]);
   }
 }
 
@@ -575,7 +737,7 @@ app.addEventListener('click', event => {
 
   if (action === 'set-mode') {
     state.mode = target.dataset.mode || 'can';
-    render();
+    render({ preserveScroll: false });
   }
   if (action === 'can-send') void runAction('can.send');
   if (action === 'can-parse') void runAction('can.parseTrace');

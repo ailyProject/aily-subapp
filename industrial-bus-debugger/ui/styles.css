@@ -165,10 +165,15 @@ textarea {
   background: var(--panel-soft);
 }
 
-input:focus,
+input:focus:not([type="checkbox"]):not([type="radio"]),
 select:focus,
 textarea:focus {
   box-shadow: 0 0 0 1px var(--primary) inset;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  box-shadow: none;
 }
 
 textarea {
@@ -180,33 +185,53 @@ textarea {
 .industrial-bus-debugger {
   display: flex;
   flex-direction: column;
+  gap: 10px;
   height: 100%;
   min-height: 0;
+  padding: 10px;
   background: var(--bg);
 }
 
 .mode-tabs {
   display: flex;
+  align-items: center;
   gap: 6px;
+  flex-shrink: 0;
   min-height: 40px;
-  margin: 10px 10px 0;
   padding: 7px 8px;
   border-radius: 5px;
   background: var(--panel);
 }
 
-.mode-tabs button span {
+.mode-tab-list {
+  display: flex;
+  min-width: 0;
+  gap: 4px;
+}
+
+.mode-tab-list button span {
   white-space: nowrap;
 }
 
 .debugger-grid {
   display: grid;
-  grid-template-columns: minmax(280px, 0.95fr) minmax(320px, 1.05fr);
-  grid-template-rows: minmax(0, 1fr) minmax(150px, 0.36fr);
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) minmax(0, 0.46fr);
+  grid-template-areas:
+    "primary secondary"
+    "logs logs";
+  gap: 8px;
   min-height: 0;
   flex: 1;
-  padding: 10px;
+  overflow: hidden;
+}
+
+.primary-panel {
+  grid-area: primary;
+}
+
+.secondary-panel {
+  grid-area: secondary;
 }
 
 .panel {
@@ -220,7 +245,7 @@ textarea {
 }
 
 .log-panel {
-  grid-column: 1 / -1;
+  grid-area: logs;
 }
 
 .panel-title,
@@ -271,7 +296,15 @@ textarea {
 .check-field input {
   width: 14px;
   height: 14px;
+  min-height: 14px;
   margin: 0;
+  padding: 0;
+  flex: 0 0 auto;
+}
+
+.field-grid > .check-field {
+  align-self: end;
+  min-height: 26px;
 }
 
 .body-input {
@@ -286,6 +319,15 @@ textarea {
 
 .mono {
   font-family: Consolas, Monaco, "Courier New", monospace;
+}
+
+.icon-action {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
 }
 
 .actions {
@@ -321,7 +363,7 @@ textarea {
 
 .log-row {
   display: grid;
-  grid-template-columns: 70px 70px minmax(130px, 0.7fr) minmax(160px, 1fr) minmax(160px, 1fr);
+  grid-template-columns: 70px minmax(72px, 110px) minmax(110px, 170px) minmax(0, 1fr) minmax(0, 1fr);
   gap: 8px;
   align-items: start;
   padding: 5px 0;
@@ -349,10 +391,12 @@ textarea {
   color: var(--danger);
 }
 
+.log-row.in .summary,
 .log-row.rx .summary {
   color: var(--ok);
 }
 
+.log-row.out .summary,
 .log-row.tx .summary {
   color: var(--primary);
 }
@@ -361,14 +405,45 @@ textarea {
   color: var(--warn);
 }
 
-@media (max-width: 760px) {
-  .debugger-grid {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto minmax(180px, 1fr);
+@media (max-width: 750px), (max-height: 820px) {
+  .industrial-bus-debugger {
+    overflow: hidden;
   }
 
-  .field-grid {
-    grid-template-columns: 1fr;
+  .debugger-grid {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    grid-template-areas: none;
+  }
+
+  .form-panel,
+  .log-panel {
+    flex-shrink: 0;
+    min-height: auto;
+    overflow: visible;
+  }
+
+  .field.grow {
+    flex: 0 0 auto;
+  }
+
+  .body-input {
+    min-height: 56px;
+    max-height: 120px;
+  }
+
+  .compact-body {
+    min-height: 56px;
+  }
+
+  .result-block {
+    min-height: 76px;
+  }
+
+  .log-list {
+    min-height: 96px;
+    max-height: min(220px, 28vh);
   }
 
   .log-row {
@@ -378,5 +453,15 @@ textarea {
   .detail,
   .hex {
     grid-column: 3;
+  }
+}
+
+@media (max-width: 520px) {
+  .field-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .panel {
+    padding: 8px;
   }
 }
