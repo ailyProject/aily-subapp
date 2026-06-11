@@ -41,6 +41,17 @@ let packetId = 1;
 let pingTimer = null;
 let requestSeq = 0;
 let logSeq = 0;
+let renderFrame = null;
+const renderFlags = {
+  full: false,
+  connection: false,
+  subscriptions: false,
+  messages: false,
+  logs: false
+};
+const pendingMessages = [];
+const MAX_MESSAGES = 100;
+const MAX_LOGS = 120;
 const pendingRequests = new Map();
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -215,6 +226,157 @@ function isConnected() {
   return state.connectionState === 'connected';
 }
 
+function scheduleRender(flags = {}) {
+  if (flags.full) {
+    renderFlags.full = true;
+  } else {
+    if (flags.connection) renderFlags.connection = true;
+    if (flags.subscriptions) renderFlags.subscriptions = true;
+    if (flags.messages) renderFlags.messages = true;
+    if (flags.logs) renderFlags.logs = true;
+  }
+
+  if (renderFrame) return;
+  renderFrame = requestAnimationFrame(() => {
+    renderFrame = null;
+    flushScheduledRender();
+  });
+}
+
+function flushScheduledRender() {
+  if (renderFlags.full || !app.querySelector('.message-list')) {
+    renderFlags.full = false;
+    renderFlags.connection = false;
+    renderFlags.subscriptions = false;
+    renderFlags.messages = false;
+    renderFlags.logs = false;
+    pendingMessages.length = 0;
+    render();
+    return;
+  }
+
+  if (renderFlags.connection) {
+    renderFlags.connection = false;
+    updateConnectionUI();
+  }
+  if (renderFlags.subscriptions) {
+    renderFlags.subscriptions = false;
+    updateSubscriptionsUI();
+  }
+  if (renderFlags.messages) {
+    renderFlags.messages = false;
+    if (pendingMessages.length) {
+      flushPendingMessages();
+    } else {
+      updateMessagesUI();
+    }
+  }
+  if (renderFlags.logs) {
+    renderFlags.logs = false;
+    updateLogsUI();
+  }
+}
+
+function updateListElement(element, html) {
+  if (!element) return;
+
+  const prevScrollHeight = element.scrollHeight;
+  const prevScrollTop = element.scrollTop;
+  element.innerHTML = html;
+
+  if (prevScrollTop > 4) {
+    element.scrollTop = prevScrollTop + (element.scrollHeight - prevScrollHeight);
+  }
+}
+
+function updateConnectionUI() {
+  const statusEl = app.querySelector('.connection-panel .status');
+  if (statusEl) {
+    statusEl.className = `status ${state.connectionState}`;
+    statusEl.textContent = t(statusKey(), state.connectionState);
+  }
+
+  const connectBtn = app.querySelector('[data-action="connect"]');
+  if (connectBtn) {
+    connectBtn.disabled = state.connectionState === 'connecting' || isConnected();
+  }
+
+  const disconnectBtn = app.querySelector('[data-action="disconnect"]');
+  if (disconnectBtn) {
+    disconnectBtn.disabled = !isConnected();
+  }
+
+  for (const selector of ['subscribe', 'unsubscribe', 'publish']) {
+    const button = app.querySelector(`[data-action="${selector}"]`);
+    if (button) {
+      button.disabled = !isConnected();
+    }
+  }
+
+  for (const button of app.querySelectorAll('[data-action="unsubscribe-topic"]')) {
+    button.disabled = !isConnected();
+  }
+}
+
+function updateSubscriptionsUI() {
+  updateListElement(app.querySelector('.subscription-list'), renderSubscriptions());
+  updateConnectionUI();
+}
+
+function updateMessagesUI() {
+  updateListElement(app.querySelector('.message-list'), renderMessages());
+}
+
+function updateLogsUI() {
+  updateListElement(app.querySelector('.log-list'), renderLogs());
+}
+
+function renderMessageRow(message) {
+  return `
+    <div class="message-row">
+      <div class="message-meta">
+        <span class="time">${escapeHtml(message.time)}</span>
+        <code>${escapeHtml(message.topic)}</code>
+        <span>QoS ${escapeHtml(message.qos)}</span>
+        ${message.retain ? `<span>${text('RETAIN', 'Retain')}</span>` : ''}
+      </div>
+      <pre class="mono">${escapeHtml(message.payload)}</pre>
+    </div>
+  `;
+}
+
+function flushPendingMessages() {
+  const list = app.querySelector('.message-list');
+  if (!list || !pendingMessages.length) return;
+
+  const fragment = document.createDocumentFragment();
+  for (const message of pendingMessages) {
+    const row = document.createElement('div');
+    row.innerHTML = renderMessageRow(message).trim();
+    fragment.appendChild(row.firstElementChild);
+  }
+  pendingMessages.length = 0;
+
+  const prevScrollHeight = list.scrollHeight;
+  const prevScrollTop = list.scrollTop;
+  list.insertBefore(fragment, list.firstChild);
+
+  while (list.children.length > MAX_MESSAGES) {
+    list.removeChild(list.lastChild);
+  }
+
+  if (prevScrollTop > 4) {
+    list.scrollTop = prevScrollTop + (list.scrollHeight - prevScrollHeight);
+  }
+}
+
+function queueMessage(message) {
+  state.messages.unshift(message);
+  state.messages = state.messages.slice(0, MAX_MESSAGES);
+  pendingMessages.push(message);
+  scheduleRender({ messages: true });
+}
+
 function pushLog(type, label, detail = '') {
   state.logs.unshift({
     id: ++logSeq,
@@ -223,8 +385,8 @@ function pushLog(type, label, detail = '') {
     detail,
     time: now()
   });
-  state.logs = state.logs.slice(0, 120);
-  render();
+  state.logs = state.logs.slice(0, MAX_LOGS);
+  scheduleRender({ logs: true });
 }
 
 function renderSubscriptions() {
@@ -237,17 +399,7 @@ function renderSubscriptions() {
 }
 
 function renderMessages() {
-  return state.messages.map(message => `
-    <div class="message-row">
-      <div class="message-meta">
-        <span class="time">${escapeHtml(message.time)}</span>
-        <code>${escapeHtml(message.topic)}</code>
-        <span>QoS ${escapeHtml(message.qos)}</span>
-        ${message.retain ? `<span>${text('RETAIN', 'Retain')}</span>` : ''}
-      </div>
-      <pre class="mono">${escapeHtml(message.payload)}</pre>
-    </div>
-  `).join('');
+  return state.messages.map(message => renderMessageRow(message)).join('');
 }
 
 function renderLogs() {
@@ -514,7 +666,7 @@ function handleConnack(data, offset) {
     state.connectionState = 'connected';
     pushLog('in', 'CONNECTED');
     startPing();
-    render();
+    scheduleRender({ connection: true });
     return;
   }
 
@@ -537,15 +689,13 @@ function handlePublish(data, offset, end) {
   }
 
   const payload = textDecoder.decode(data.slice(cursor, end));
-  state.messages.unshift({
+  queueMessage({
     time: now(),
     topic: topicResult.value,
     payload,
     qos,
     retain
   });
-  state.messages = state.messages.slice(0, 100);
-  pushLog('in', 'MESSAGE_RECEIVED', topicResult.value);
 
   if (qos === 1 && incomingPacketId > 0) {
     sendPacket(bytes([0x40, 0x02, (incomingPacketId >> 8) & 0xff, incomingPacketId & 0xff]));
@@ -588,6 +738,7 @@ function connectMqtt() {
 
   closeMqttSocket(false);
   state.connectionState = 'connecting';
+  scheduleRender({ connection: true });
   pushLog('system', 'CONNECTING', url);
 
   try {
@@ -614,6 +765,7 @@ function connectMqtt() {
     socket.addEventListener('close', event => {
       stopPing();
       state.connectionState = 'disconnected';
+      scheduleRender({ connection: true, subscriptions: true });
       pushLog('system', 'DISCONNECTED', `${event.code} ${event.reason}`.trim());
       if (mqttSocket === socket) {
         mqttSocket = null;
@@ -621,6 +773,7 @@ function connectMqtt() {
     });
   } catch (error) {
     state.connectionState = 'disconnected';
+    scheduleRender({ connection: true });
     pushLog('error', error.message || 'SOCKET_ERROR');
   }
 }
@@ -644,9 +797,8 @@ function closeMqttSocket(pushDisconnectedLog = true) {
   state.connectionState = 'disconnected';
   if (pushDisconnectedLog) {
     pushLog('system', 'DISCONNECTED');
-  } else {
-    render();
   }
+  scheduleRender({ connection: true, subscriptions: true });
 }
 
 function subscribe() {
@@ -663,6 +815,7 @@ function subscribe() {
   sendControlPacket(0x82, body);
   if (!state.subscriptions.includes(topic)) {
     state.subscriptions = [topic, ...state.subscriptions].slice(0, 20);
+    scheduleRender({ subscriptions: true });
   }
   pushLog('out', 'SUBSCRIBE_SENT', topic);
 }
@@ -679,6 +832,7 @@ function unsubscribe(topic = state.subscribeTopic) {
 
   sendControlPacket(0xa2, body);
   state.subscriptions = state.subscriptions.filter(item => item !== nextTopic);
+  scheduleRender({ subscriptions: true });
   pushLog('out', 'UNSUBSCRIBE_SENT', nextTopic);
 }
 
@@ -791,7 +945,7 @@ app.addEventListener('input', event => {
 app.addEventListener('change', event => {
   if (event.target.matches('[data-field]')) {
     updateFromInputs();
-    render();
+    scheduleRender({ full: true });
   }
 });
 
@@ -810,11 +964,12 @@ app.addEventListener('click', event => {
   if (action === 'publish') publish();
   if (action === 'clear-messages') {
     state.messages = [];
-    render();
+    pendingMessages.length = 0;
+    scheduleRender({ messages: true });
   }
   if (action === 'clear-logs') {
     state.logs = [];
-    render();
+    scheduleRender({ logs: true });
   }
 });
 
