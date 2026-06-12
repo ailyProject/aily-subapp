@@ -124,24 +124,32 @@ let requestSeq = 0;
 let logSeq = 0;
 const pendingRequests = new Map<number, PendingRequest>();
 
+if (!document.documentElement.dataset['theme']) {
+  document.body.style.visibility = 'hidden';
+}
+
 const title = computed(() => t('TITLE', TOOL_NAME));
 const descriptionText = computed(() => t('DESCRIPTION', TOOL_DESCRIPTION));
 const statusLabel = computed(() => t(`STATUS_${backendStatus.value.toUpperCase()}`, backendStatus.value));
 
 onMounted(() => {
+  void bootstrap();
+});
+
+async function bootstrap(): Promise<void> {
   const query = new URLSearchParams(window.location.search);
   token.value = query.get('token') || '';
   hostContext.lang = normalizeLang(query.get('lang') || navigator.language || 'en');
-  hostContext.theme = normalizeTheme(query.get('theme'));
+  hostContext.theme = 'dark';
   hostContext.platform = 'browser';
 
   document.documentElement.lang = hostContext.lang;
+  await connectHost();
   applyTheme(hostContext.theme);
   loadDraft();
   void loadI18n(hostContext.lang);
-  void connectHost();
   connectBackend();
-});
+}
 
 onBeforeUnmount(() => {
   saveDraft();
@@ -212,6 +220,7 @@ function normalizeTheme(theme: string | null | undefined): ThemeName {
 function applyTheme(theme: ThemeName): void {
   document.documentElement.dataset['theme'] = theme;
   document.documentElement.style.colorScheme = theme;
+  document.body.style.visibility = '';
 
   let themeLink = document.getElementById('theme-style') as HTMLLinkElement | null;
   if (!themeLink) {
@@ -291,18 +300,17 @@ async function connectHost(): Promise<void> {
     }
   });
 
-  connection.promise
-    .then(async remote => {
-      hostRemote = remote;
-      if (typeof remote.getHostContext === 'function') {
-        const context = await remote.getHostContext();
-        if (context) await applyHostContext(context);
-      }
-      if (backendStatus.value === 'ready') notifyHostReady();
-    })
-    .catch(error => {
-      pushLog('error', 'HOST_CONNECTION_FAILED', errorMessage(error));
-    });
+  try {
+    const remote = await connection.promise;
+    hostRemote = remote;
+    if (typeof remote.getHostContext === 'function') {
+      const context = await remote.getHostContext();
+      if (context) await applyHostContext(context);
+    }
+    if (backendStatus.value === 'ready') notifyHostReady();
+  } catch (error) {
+    pushLog('error', 'HOST_CONNECTION_FAILED', errorMessage(error));
+  }
 }
 
 function ensurePenpal(): Promise<boolean> {

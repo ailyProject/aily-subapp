@@ -281,16 +281,20 @@ export class App implements OnInit, OnDestroy, AfterViewChecked {
     this.token = query.get('token') || '';
     this.hostContext = {
       lang: this.normalizeLang(query.get('lang') || navigator.language || 'en'),
-      theme: this.normalizeTheme(query.get('theme')),
+      theme: 'dark',
       platform: 'browser'
     };
 
+    void this.bootstrap();
+  }
+
+  private async bootstrap(): Promise<void> {
     document.documentElement.lang = this.hostContext.lang;
+    await this.connectHost();
     this.applyTheme(this.hostContext.theme);
     this.loadSavedConfig();
     this.loadQuickSendList();
     void this.loadI18n(this.hostContext.lang);
-    this.connectHost();
     this.connectBackend();
   }
 
@@ -757,7 +761,7 @@ export class App implements OnInit, OnDestroy, AfterViewChecked {
     }
   }
 
-  private connectHost(): void {
+  private async connectHost(): Promise<void> {
     if (!window.Penpal || !window.parent || window.parent === window) return;
 
     const messenger = new window.Penpal.WindowMessenger({
@@ -782,18 +786,17 @@ export class App implements OnInit, OnDestroy, AfterViewChecked {
       }
     });
 
-    connection.promise
-      .then(async remote => {
-        this.hostRemote = remote;
-        if (typeof remote.getHostContext === 'function') {
-          const context = await remote.getHostContext();
-          if (context) await this.applyHostContext(context);
-        }
-        if (this.backendStatus === 'ready') this.notifyHostReady();
-      })
-      .catch(error => {
-        this.pushSystem(this.t('HOST_CONNECTION_FAILED', 'Host connection failed'), this.errorMessage(error), true);
-      });
+    try {
+      const remote = await connection.promise;
+      this.hostRemote = remote;
+      if (typeof remote.getHostContext === 'function') {
+        const context = await remote.getHostContext();
+        if (context) await this.applyHostContext(context);
+      }
+      if (this.backendStatus === 'ready') this.notifyHostReady();
+    } catch (error) {
+      this.pushSystem(this.t('HOST_CONNECTION_FAILED', 'Host connection failed'), this.errorMessage(error), true);
+    }
   }
 
   private notifyHostReady(): void {

@@ -7,7 +7,7 @@ const host = {
   remote: null,
   context: {
     lang: normalizeLang(query.get('lang') || navigator.language || 'en'),
-    theme: normalizeTheme(query.get('theme')),
+    theme: 'dark',
     platform: 'browser'
   }
 };
@@ -60,8 +60,6 @@ let requestSeq = 0;
 let logSeq = 0;
 const pendingRequests = new Map();
 
-document.documentElement.lang = host.context.lang;
-applyTheme(host.context.theme);
 loadDraft();
 
 function normalizeLang(lang) {
@@ -134,7 +132,7 @@ async function applyHostContext(context = {}) {
   await loadI18n(lang);
 }
 
-function connectHost() {
+async function connectHost() {
   if (!window.Penpal || !window.parent || window.parent === window) {
     return;
   }
@@ -165,22 +163,21 @@ function connectHost() {
     }
   });
 
-  connection.promise
-    .then(async remote => {
-      host.remote = remote;
-      if (typeof remote.getHostContext === 'function') {
-        const context = await remote.getHostContext();
-        if (context) {
-          await applyHostContext(context);
-        }
+  try {
+    const remote = await connection.promise;
+    host.remote = remote;
+    if (typeof remote.getHostContext === 'function') {
+      const context = await remote.getHostContext();
+      if (context) {
+        await applyHostContext(context);
       }
-      if (state.backendStatus === 'ready') {
-        notifyHostReady();
-      }
-    })
-    .catch(error => {
-      pushLog('wsLogs', 'error', 'Host connection failed', error.message || String(error));
-    });
+    }
+    if (state.backendStatus === 'ready') {
+      notifyHostReady();
+    }
+  } catch (error) {
+    pushLog('wsLogs', 'error', 'Host connection failed', error.message || String(error));
+  }
 }
 
 function notifyHostReady() {
@@ -686,7 +683,13 @@ window.addEventListener('beforeunload', () => {
   if (externalWs) externalWs.close();
 });
 
-render();
-void loadI18n(host.context.lang);
-connectHost();
-connectBackend();
+async function bootstrap() {
+  document.documentElement.lang = host.context.lang;
+  await connectHost();
+  applyTheme(host.context.theme);
+  render();
+  void loadI18n(host.context.lang);
+  connectBackend();
+}
+
+void bootstrap();

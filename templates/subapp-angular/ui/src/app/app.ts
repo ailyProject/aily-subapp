@@ -104,15 +104,19 @@ export class App implements OnInit, OnDestroy {
     this.token = query.get('token') || '';
     this.hostContext = {
       lang: this.normalizeLang(query.get('lang') || navigator.language || 'en'),
-      theme: this.normalizeTheme(query.get('theme')),
+      theme: 'dark',
       platform: 'browser'
     };
 
+    void this.bootstrap();
+  }
+
+  private async bootstrap(): Promise<void> {
     document.documentElement.lang = this.hostContext.lang;
+    await this.connectHost();
     this.applyTheme(this.hostContext.theme);
     this.loadDraft();
     void this.loadI18n(this.hostContext.lang);
-    this.connectHost();
     this.connectBackend();
   }
 
@@ -230,7 +234,7 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  private connectHost(): void {
+  private async connectHost(): Promise<void> {
     if (!window.Penpal || !window.parent || window.parent === window) return;
 
     const messenger = new window.Penpal.WindowMessenger({
@@ -259,18 +263,17 @@ export class App implements OnInit, OnDestroy {
       }
     });
 
-    connection.promise
-      .then(async remote => {
-        this.hostRemote = remote;
-        if (typeof remote.getHostContext === 'function') {
-          const context = await remote.getHostContext();
-          if (context) await this.applyHostContext(context);
-        }
-        if (this.backendStatus === 'ready') this.notifyHostReady();
-      })
-      .catch(error => {
-        this.pushLog('error', 'HOST_CONNECTION_FAILED', this.errorMessage(error));
-      });
+    try {
+      const remote = await connection.promise;
+      this.hostRemote = remote;
+      if (typeof remote.getHostContext === 'function') {
+        const context = await remote.getHostContext();
+        if (context) await this.applyHostContext(context);
+      }
+      if (this.backendStatus === 'ready') this.notifyHostReady();
+    } catch (error) {
+      this.pushLog('error', 'HOST_CONNECTION_FAILED', this.errorMessage(error));
+    }
   }
 
   private notifyHostReady(): void {

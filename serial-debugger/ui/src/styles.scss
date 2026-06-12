@@ -35,6 +35,10 @@
   --hover: rgba(127, 127, 127, 0.14);
 }
 
+html:not([data-theme]) body {
+  visibility: hidden;
+}
+
 html[data-theme="dark"] {
   --aily-bg-primary: #2b2d30;
   --aily-bg-secondary: #323437;
