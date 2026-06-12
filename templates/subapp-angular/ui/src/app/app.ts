@@ -58,6 +58,7 @@ declare global {
 const TOOL_NAMESPACE = '{{TOOL_NAMESPACE}}';
 const TOOL_NAME = '{{Tool Name}}';
 const TOOL_DESCRIPTION = '{{tool-description}}';
+const DRAFT_KEY = '{{tool-id}}.angular.ui.draft.v1';
 
 @Component({
   selector: 'app-root',
@@ -109,12 +110,14 @@ export class App implements OnInit, OnDestroy {
 
     document.documentElement.lang = this.hostContext.lang;
     this.applyTheme(this.hostContext.theme);
+    this.loadDraft();
     void this.loadI18n(this.hostContext.lang);
     this.connectHost();
     this.connectBackend();
   }
 
   ngOnDestroy(): void {
+    this.saveDraft();
     this.rejectPending(new Error('Backend WebSocket closed'));
     this.backendWs?.close();
   }
@@ -130,6 +133,7 @@ export class App implements OnInit, OnDestroy {
     try {
       const data = await this.request<Record<string, unknown>>('sample.echo', { message: text });
       this.result = JSON.stringify(data, null, 2);
+      this.saveDraft();
       this.pushLog('response', 'ECHO_RESPONSE', String(data['message'] || ''));
     } catch (error) {
       this.pushLog('error', 'ECHO_FAILED', this.errorMessage(error));
@@ -140,6 +144,29 @@ export class App implements OnInit, OnDestroy {
   clearOutput(): void {
     this.result = '';
     this.logs = [];
+    this.saveDraft();
+  }
+
+  saveDraft(): void {
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({
+        message: this.message,
+        result: this.result
+      }));
+    } catch {
+      // Storage may be unavailable in some browser modes.
+    }
+  }
+
+  private loadDraft(): void {
+    try {
+      const draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null') as Partial<Record<'message' | 'result', string>> | null;
+      if (!draft || typeof draft !== 'object') return;
+      if (typeof draft.message === 'string') this.message = draft.message;
+      if (typeof draft.result === 'string') this.result = draft.result;
+    } catch {
+      // Ignore invalid persisted draft data.
+    }
   }
 
   private normalizeLang(lang: string | null): string {
@@ -221,10 +248,14 @@ export class App implements OnInit, OnDestroy {
           window.focus();
           return { ok: true };
         },
-        beforeClose: () => ({
-          canClose: true,
-          connected: this.backendWs?.readyState === WebSocket.OPEN
-        })
+        beforeClose: () => {
+          this.saveDraft();
+          return {
+            canClose: true,
+            connected: this.backendWs?.readyState === WebSocket.OPEN,
+            draftSaved: true
+          };
+        }
       }
     });
 

@@ -49,6 +49,7 @@ const state = {
   modbusResponseHex: '01 03 04 00 2A 00 64 DA 3F',
   logs: []
 };
+const DRAFT_KEY = 'industrial-bus-debugger.ui.draft.v1';
 
 const canBitrates = ['125000', '250000', '500000', '1000000'];
 const baudRates = ['9600', '19200', '38400', '57600', '115200', '230400'];
@@ -77,6 +78,7 @@ const pendingRequests = new Map();
 
 document.documentElement.lang = host.context.lang;
 applyTheme(host.context.theme);
+loadDraft();
 
 function normalizeLang(lang) {
   const normalized = String(lang || 'en').toLowerCase().replace(/-/g, '_');
@@ -168,6 +170,7 @@ function connectHost() {
         return { ok: true };
       },
       beforeClose() {
+        saveDraft();
         return { canClose: true };
       }
     }
@@ -379,6 +382,33 @@ function addLogs(logs = []) {
   }));
   state.logs = [...next, ...state.logs].slice(0, 160);
   render();
+}
+
+function loadDraft() {
+  try {
+    const draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
+    if (!draft || typeof draft !== 'object') return;
+    Object.assign(state, {
+      ...draft,
+      logs: state.logs,
+      backendStatus: state.backendStatus,
+      backendPid: state.backendPid
+    });
+  } catch {
+    // Ignore invalid persisted draft data.
+  }
+}
+
+function saveDraft() {
+  try {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({
+      mode: state.mode,
+      ...currentPayload(),
+      modbusRequestHex: state.modbusRequestHex
+    }));
+  } catch {
+    // Storage may be unavailable in some browser modes.
+  }
 }
 
 function optionList(values, selected) {
@@ -697,6 +727,7 @@ async function runAction(method) {
     if (result.requestHex !== undefined) {
       state.modbusRequestHex = result.requestHex || '';
     }
+    saveDraft();
     addLogs(result.logs || []);
   } catch (error) {
     addLogs([{ direction: 'error', protocol: 'Backend', summary: 'BACKEND_ERROR', detail: localizedErrorMessage(error.message || 'Backend error') }]);
@@ -718,12 +749,16 @@ async function copyModbusRequest() {
 }
 
 app.addEventListener('input', event => {
-  if (event.target.matches('[data-field]')) updateFromInputs();
+  if (event.target.matches('[data-field]')) {
+    updateFromInputs();
+    saveDraft();
+  }
 });
 
 app.addEventListener('change', event => {
   if (event.target.matches('[data-field]')) {
     updateFromInputs();
+    saveDraft();
     render();
   }
 });
@@ -737,6 +772,7 @@ app.addEventListener('click', event => {
 
   if (action === 'set-mode') {
     state.mode = target.dataset.mode || 'can';
+    saveDraft();
     render({ preserveScroll: false });
   }
   if (action === 'can-send') void runAction('can.send');
@@ -753,6 +789,7 @@ app.addEventListener('click', event => {
 });
 
 window.addEventListener('beforeunload', () => {
+  saveDraft();
   if (backendWs) backendWs.close();
 });
 

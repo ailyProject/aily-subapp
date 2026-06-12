@@ -12,7 +12,7 @@
       <div class="panel-title">{{ t('COMMAND', 'Command') }}</div>
       <label class="field">
         <span>{{ t('MESSAGE', 'Message') }}</span>
-        <input type="text" name="message" [(ngModel)]="message">
+        <input type="text" name="message" [ngModel]="message" (ngModelChange)="message = $event; saveDraft()">
       </label>
       <div class="actions">
         <button class="primary" type="submit" [disabled]="backendStatus !== 'ready'">

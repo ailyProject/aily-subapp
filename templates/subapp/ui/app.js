@@ -22,6 +22,8 @@ const state = {
   result: '',
   logs: []
 };
+const DRAFT_KEY = '{{tool-id}}.ui.draft.v1';
+const DRAFT_FIELDS = ['message', 'result'];
 
 let backendWs = null;
 let requestSeq = 0;
@@ -30,6 +32,7 @@ const pendingRequests = new Map();
 
 document.documentElement.lang = host.context.lang;
 applyTheme(host.context.theme);
+loadDraft();
 
 function normalizeLang(lang) {
   const normalized = String(lang || 'en').toLowerCase().replace(/-/g, '_');
@@ -123,6 +126,7 @@ function connectHost() {
         return { ok: true };
       },
       beforeClose() {
+        saveDraft();
         return {
           canClose: true,
           connected: backendWs?.readyState === WebSocket.OPEN
@@ -196,6 +200,32 @@ function pushLog(type, label, detail = '') {
   });
   state.logs = state.logs.slice(0, 80);
   render();
+}
+
+function loadDraft() {
+  try {
+    const draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
+    if (!draft || typeof draft !== 'object') return;
+    for (const field of DRAFT_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(draft, field)) {
+        state[field] = draft[field];
+      }
+    }
+  } catch {
+    // Ignore invalid persisted draft data.
+  }
+}
+
+function saveDraft() {
+  try {
+    const draft = {};
+    for (const field of DRAFT_FIELDS) {
+      draft[field] = state[field];
+    }
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+  } catch {
+    // Storage may be unavailable in some browser modes.
+  }
 }
 
 function request(method, params = {}, timeoutMs = 15000) {
@@ -303,6 +333,7 @@ async function runEcho() {
   try {
     const result = await request('sample.echo', { message });
     state.result = JSON.stringify(result, null, 2);
+    saveDraft();
     pushLog('response', 'ECHO_RESPONSE', result.message || '');
   } catch (error) {
     pushLog('error', 'ECHO_FAILED', error.message || String(error));
@@ -365,6 +396,7 @@ function updateFromInputs() {
 app.addEventListener('input', event => {
   if (event.target.matches('[data-field]')) {
     updateFromInputs();
+    saveDraft();
   }
 });
 
@@ -379,11 +411,13 @@ app.addEventListener('click', event => {
   if (action === 'clear') {
     state.result = '';
     state.logs = [];
+    saveDraft();
     render();
   }
 });
 
 window.addEventListener('beforeunload', () => {
+  saveDraft();
   if (backendWs) backendWs.close();
 });
 

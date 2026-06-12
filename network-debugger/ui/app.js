@@ -37,6 +37,22 @@ const state = {
   wsLogs: []
 };
 const httpMethods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
+const DRAFT_KEY = 'network-debugger.ui.draft.v1';
+const DRAFT_FIELDS = [
+  'mode',
+  'httpMethod',
+  'httpUrl',
+  'httpHeadersText',
+  'httpBody',
+  'httpTimeout',
+  'responseStatus',
+  'responseDuration',
+  'responseSize',
+  'responseBody',
+  'responseHeaders',
+  'wsUrl',
+  'wsMessage'
+];
 
 let backendWs = null;
 let externalWs = null;
@@ -46,6 +62,7 @@ const pendingRequests = new Map();
 
 document.documentElement.lang = host.context.lang;
 applyTheme(host.context.theme);
+loadDraft();
 
 function normalizeLang(lang) {
   const normalized = String(lang || 'en').toLowerCase().replace(/-/g, '_');
@@ -139,6 +156,7 @@ function connectHost() {
         return { ok: true };
       },
       beforeClose() {
+        saveDraft();
         return {
           canClose: true,
           connected: state.wsConnected
@@ -220,6 +238,32 @@ function pushLog(listName, type, label, detail = '') {
   });
   state[listName] = state[listName].slice(0, listName === 'httpLogs' ? 80 : 120);
   render();
+}
+
+function loadDraft() {
+  try {
+    const draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
+    if (!draft || typeof draft !== 'object') return;
+    for (const field of DRAFT_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(draft, field)) {
+        state[field] = draft[field];
+      }
+    }
+  } catch {
+    // Ignore invalid persisted draft data.
+  }
+}
+
+function saveDraft() {
+  try {
+    const draft = {};
+    for (const field of DRAFT_FIELDS) {
+      draft[field] = state[field];
+    }
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+  } catch {
+    // Storage may be unavailable in some browser modes.
+  }
 }
 
 function captureScrollState() {
@@ -517,6 +561,7 @@ async function sendHttpRequest() {
     pushLog('httpLogs', 'error', error.message || 'REQUEST_FAILED');
   } finally {
     state.httpLoading = false;
+    saveDraft();
     render();
   }
 }
@@ -528,6 +573,7 @@ function clearHttp() {
   state.responseBody = '';
   state.responseHeaders = [];
   state.httpLogs = [];
+  saveDraft();
   render();
 }
 
@@ -599,12 +645,14 @@ function formatSocketData(data) {
 app.addEventListener('input', event => {
   if (event.target.matches('[data-field]')) {
     updateFromInputs();
+    saveDraft();
   }
 });
 
 app.addEventListener('change', event => {
   if (event.target.matches('[data-field]')) {
     updateFromInputs();
+    saveDraft();
     render();
   }
 });
@@ -618,6 +666,7 @@ app.addEventListener('click', event => {
 
   if (action === 'set-mode') {
     state.mode = target.dataset.mode || 'http';
+    saveDraft();
     render({ preserveScroll: false });
   }
   if (action === 'send-http') void sendHttpRequest();
@@ -632,6 +681,7 @@ app.addEventListener('click', event => {
 });
 
 window.addEventListener('beforeunload', () => {
+  saveDraft();
   if (backendWs) backendWs.close();
   if (externalWs) externalWs.close();
 });

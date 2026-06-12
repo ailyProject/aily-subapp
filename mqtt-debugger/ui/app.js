@@ -34,6 +34,20 @@ const state = {
   messages: [],
   logs: []
 };
+const DRAFT_KEY = 'mqtt-debugger.ui.draft.v1';
+const DRAFT_FIELDS = [
+  'brokerUrl',
+  'clientId',
+  'username',
+  'keepAlive',
+  'cleanSession',
+  'subscribeTopic',
+  'subscribeQos',
+  'subscriptions',
+  'publishTopic',
+  'publishPayload',
+  'publishRetain'
+];
 
 let backendWs = null;
 let mqttSocket = null;
@@ -58,6 +72,7 @@ const textDecoder = new TextDecoder();
 
 document.documentElement.lang = host.context.lang;
 applyTheme(host.context.theme);
+loadDraft();
 
 function normalizeLang(lang) {
   const normalized = String(lang || 'en').toLowerCase().replace(/-/g, '_');
@@ -151,6 +166,7 @@ function connectHost() {
         return { ok: true };
       },
       beforeClose() {
+        saveDraft();
         return {
           canClose: true,
           connected: state.connectionState === 'connected'
@@ -387,6 +403,32 @@ function pushLog(type, label, detail = '') {
   });
   state.logs = state.logs.slice(0, MAX_LOGS);
   scheduleRender({ logs: true });
+}
+
+function loadDraft() {
+  try {
+    const draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
+    if (!draft || typeof draft !== 'object') return;
+    for (const field of DRAFT_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(draft, field)) {
+        state[field] = draft[field];
+      }
+    }
+  } catch {
+    // Ignore invalid persisted draft data.
+  }
+}
+
+function saveDraft() {
+  try {
+    const draft = {};
+    for (const field of DRAFT_FIELDS) {
+      draft[field] = state[field];
+    }
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+  } catch {
+    // Storage may be unavailable in some browser modes.
+  }
 }
 
 function renderSubscriptions() {
@@ -939,12 +981,14 @@ function connectBackend() {
 app.addEventListener('input', event => {
   if (event.target.matches('[data-field]')) {
     updateFromInputs();
+    saveDraft();
   }
 });
 
 app.addEventListener('change', event => {
   if (event.target.matches('[data-field]')) {
     updateFromInputs();
+    saveDraft();
     scheduleRender({ full: true });
   }
 });
@@ -971,9 +1015,11 @@ app.addEventListener('click', event => {
     state.logs = [];
     scheduleRender({ logs: true });
   }
+  saveDraft();
 });
 
 window.addEventListener('beforeunload', () => {
+  saveDraft();
   if (backendWs) backendWs.close();
   closeMqttSocket(false);
 });

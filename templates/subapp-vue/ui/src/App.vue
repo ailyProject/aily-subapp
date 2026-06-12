@@ -45,7 +45,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 
 type ThemeName = 'dark' | 'light';
 
@@ -103,6 +103,7 @@ declare global {
 const TOOL_NAMESPACE = '{{TOOL_NAMESPACE}}';
 const TOOL_NAME = '{{Tool Name}}';
 const TOOL_DESCRIPTION = '{{tool-description}}';
+const DRAFT_KEY = '{{tool-id}}.vue.ui.draft.v1';
 
 const hostContext = reactive<HostContext>({
   lang: 'en',
@@ -136,15 +137,19 @@ onMounted(() => {
 
   document.documentElement.lang = hostContext.lang;
   applyTheme(hostContext.theme);
+  loadDraft();
   void loadI18n(hostContext.lang);
   void connectHost();
   connectBackend();
 });
 
 onBeforeUnmount(() => {
+  saveDraft();
   rejectPending(new Error('Backend WebSocket closed'));
   backendWs?.close();
 });
+
+watch([message, result], () => saveDraft());
 
 function t(key: string, fallback = key): string {
   return i18n.value[key] || fallback;
@@ -157,6 +162,7 @@ async function runEcho(): Promise<void> {
   try {
     const data = await request<Record<string, unknown>>('sample.echo', { message: text });
     result.value = JSON.stringify(data, null, 2);
+    saveDraft();
     pushLog('response', 'ECHO_RESPONSE', String(data['message'] || ''));
   } catch (error) {
     pushLog('error', 'ECHO_FAILED', errorMessage(error));
@@ -167,6 +173,29 @@ async function runEcho(): Promise<void> {
 function clearOutput(): void {
   result.value = '';
   logs.value = [];
+  saveDraft();
+}
+
+function loadDraft(): void {
+  try {
+    const draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null') as Partial<Record<'message' | 'result', string>> | null;
+    if (!draft || typeof draft !== 'object') return;
+    if (typeof draft.message === 'string') message.value = draft.message;
+    if (typeof draft.result === 'string') result.value = draft.result;
+  } catch {
+    // Ignore invalid persisted draft data.
+  }
+}
+
+function saveDraft(): void {
+  try {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({
+      message: message.value,
+      result: result.value
+    }));
+  } catch {
+    // Storage may be unavailable in some browser modes.
+  }
 }
 
 function normalizeLang(lang: string | null): string {
@@ -251,10 +280,14 @@ async function connectHost(): Promise<void> {
         window.focus();
         return { ok: true };
       },
-      beforeClose: () => ({
-        canClose: true,
-        connected: backendWs?.readyState === WebSocket.OPEN
-      })
+      beforeClose: () => {
+        saveDraft();
+        return {
+          canClose: true,
+          connected: backendWs?.readyState === WebSocket.OPEN,
+          draftSaved: true
+        };
+      }
     }
   });
 
