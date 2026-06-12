@@ -222,6 +222,33 @@ function pushLog(listName, type, label, detail = '') {
   render();
 }
 
+function captureScrollState() {
+  const selectors = ['.debugger-grid', '.log-list', '.header-list', 'pre'];
+  const positions = [];
+
+  for (const selector of selectors) {
+    app.querySelectorAll(selector).forEach((element, index) => {
+      positions.push({
+        selector,
+        index,
+        top: element.scrollTop,
+        left: element.scrollLeft
+      });
+    });
+  }
+
+  return positions;
+}
+
+function restoreScrollState(positions) {
+  for (const position of positions) {
+    const element = app.querySelectorAll(position.selector)[position.index];
+    if (!element) continue;
+    element.scrollTop = position.top;
+    element.scrollLeft = position.left;
+  }
+}
+
 function renderLogList(logs) {
   if (!logs.length) {
     return '';
@@ -336,7 +363,10 @@ function renderWebSocket() {
   `;
 }
 
-function render() {
+function render(options = {}) {
+  const preserveScroll = options.preserveScroll !== false;
+  const scrollState = preserveScroll ? captureScrollState() : [];
+
   app.innerHTML = `
     <div class="mode-tabs">
       <button type="button" data-action="set-mode" data-mode="http" class="${state.mode === 'http' ? 'active' : ''}">${text('HTTP', 'HTTP')}</button>
@@ -344,6 +374,10 @@ function render() {
     </div>
     ${state.mode === 'http' ? renderHttp() : renderWebSocket()}
   `;
+
+  if (preserveScroll) {
+    restoreScrollState(scrollState);
+  }
 }
 
 function updateFromInputs() {
@@ -584,7 +618,7 @@ app.addEventListener('click', event => {
 
   if (action === 'set-mode') {
     state.mode = target.dataset.mode || 'http';
-    render();
+    render({ preserveScroll: false });
   }
   if (action === 'send-http') void sendHttpRequest();
   if (action === 'clear-http') clearHttp();

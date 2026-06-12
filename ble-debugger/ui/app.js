@@ -49,6 +49,7 @@ const state = {
   backendPid: 0,
   activeTab: 'scan',
   scanning: false,
+  scanBusy: false,
   allowDuplicates: true,
   serviceFilter: '',
   devices: [],
@@ -234,9 +235,62 @@ function attrText(key, fallback = key) {
   return escapeAttr(t(key, fallback));
 }
 
+function classSelector(className) {
+  return String(className || '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(name => `.${name.replace(/[^a-zA-Z0-9_-]/g, '\\$&')}`)
+    .join('');
+}
+
 function logLabel(label) {
   const key = LOG_LABEL_KEYS[label];
   return key ? t(key, label) : label;
+}
+
+function currentPlatform() {
+  const platform = String(host.context.platform || '').toLowerCase();
+  const userAgent = navigator.userAgent.toLowerCase();
+  if (platform.includes('darwin') || platform.includes('mac') || userAgent.includes('mac os x')) return 'macos';
+  if (platform.includes('win') || userAgent.includes('windows')) return 'windows';
+  return 'generic';
+}
+
+function permissionHintState() {
+  return ['unauthorized', 'unsupported', 'poweredOff'].includes(state.adapterState) ? 'warning' : 'info';
+}
+
+function permissionHintContent() {
+  const platform = currentPlatform();
+  if (platform === 'macos') {
+    return {
+      title: text('PERMISSION_HINT_MAC_TITLE', 'Allow Bluetooth access on macOS'),
+      body: text('PERMISSION_HINT_MAC_BODY', 'If scanning finds no devices, open System Settings > Privacy & Security > Bluetooth and allow this app or Terminal, then restart the BLE debugger.')
+    };
+  }
+  if (platform === 'windows') {
+    return {
+      title: text('PERMISSION_HINT_WINDOWS_TITLE', 'Check Bluetooth access on Windows'),
+      body: text('PERMISSION_HINT_WINDOWS_BODY', 'If scanning finds no devices, turn on Bluetooth in Settings > Bluetooth & devices, keep Nearby devices discovery available, and close other tools that may be using the adapter.')
+    };
+  }
+  return {
+    title: text('PERMISSION_HINT_GENERIC_TITLE', 'Bluetooth permission reminder'),
+    body: text('PERMISSION_HINT_GENERIC_BODY', 'If scanning finds no devices, make sure Bluetooth is turned on, this app has permission to use it, and no other debugger is holding the adapter.')
+  };
+}
+
+function renderPermissionHint() {
+  const hint = permissionHintContent();
+  return `
+    <span class="permission-hint ${permissionHintState()}">
+      <button type="button" class="permission-trigger" aria-label="${attrText('PERMISSION_HINT_GENERIC_TITLE', 'Bluetooth permission reminder')}">?</button>
+      <span class="permission-popover" role="tooltip">
+        <strong>${hint.title}</strong>
+        <span>${hint.body}</span>
+      </span>
+    </span>
+  `;
 }
 
 function rssiClass(device) {
@@ -342,6 +396,18 @@ function renderDevices() {
       </div>
     `;
   }).join('');
+}
+
+function renderDeviceList() {
+  const list = app.querySelector('.device-list');
+  if (!list) {
+    render();
+    return;
+  }
+
+  const scrollTop = list.scrollTop;
+  list.innerHTML = renderDevices();
+  list.scrollTop = scrollTop;
 }
 
 function renderGatt(connection) {
@@ -477,6 +543,7 @@ function renderLogPanel() {
 }
 
 function renderScanTab() {
+  const scanDisabled = state.scanBusy || (!state.scanning && state.backendStatus !== 'ready');
   return `
     <div class="tab-page scan-page" role="tabpanel">
       <section class="panel scan-panel">
@@ -495,7 +562,8 @@ function renderScanTab() {
           </label>
         </div>
         <div class="actions">
-          <button type="button" class="primary" data-action="toggle-scan" ${!state.scanning && state.backendStatus !== 'ready' ? 'disabled' : ''}>${state.scanning ? text('STOP_SCAN', 'Stop scan') : text('START_SCAN', 'Start scan')}</button>
+          <button type="button" class="primary" data-action="toggle-scan" ${scanDisabled ? 'disabled' : ''}>${state.scanning ? text('STOP_SCAN', 'Stop scan') : text('START_SCAN', 'Start scan')}</button>
+          ${renderPermissionHint()}
         </div>
         <div class="device-list">${renderDevices()}</div>
       </section>
@@ -553,6 +621,9 @@ function render() {
     }
   }
 
+  const scrollPositions = Array.from(app.querySelectorAll('.device-list, .gatt-list, .log-list'))
+    .map(element => [element.className, element.scrollTop]);
+
   app.className = `ble-debugger ${state.backendStatus === 'connecting' ? 'loading' : ''} ${state.backendStatus === 'error' ? 'failed' : ''}`;
   app.innerHTML = `
     ${renderTabs()}
@@ -560,6 +631,13 @@ function render() {
 
     <div class="overlay">${state.backendStatus === 'error' ? text('UI_FAILED', 'BLE debugger backend connection failed') : text('UI_CONNECTING', 'Connecting BLE debugger...')}</div>
   `;
+
+  for (const [className, scrollTop] of scrollPositions) {
+    const selector = classSelector(className);
+    if (!selector) continue;
+    const element = app.querySelector(selector);
+    if (element) element.scrollTop = scrollTop;
+  }
 }
 
 function updateFromInputs() {
@@ -676,7 +754,9 @@ function upsertDevice(device) {
   if (connection) {
     connection.device = { ...connection.device, ...device };
   }
-  render();
+  if (state.activeTab === 'scan') {
+    renderDeviceList();
+  }
 }
 
 function updateCharacteristic(deviceId, serviceUuid, characteristicUuid, patch) {
@@ -863,6 +943,10 @@ async function startScan() {
   const serviceUuids = parseServiceFilter();
   if (serviceUuids === null) return;
 
+  state.scanBusy = true;
+  state.scanning = true;
+  render();
+
   try {
     await request('startScan', {
       serviceUuids,
@@ -871,17 +955,29 @@ async function startScan() {
     state.scanning = true;
     pushLog('scan', 'Scan started');
   } catch (error) {
+    state.scanning = false;
     pushLog('error', 'Scan failed', error.message);
+  } finally {
+    state.scanBusy = false;
+    render();
   }
 }
 
 async function stopScan() {
+  state.scanBusy = true;
+  state.scanning = false;
+  render();
+
   try {
     await request('stopScan');
     state.scanning = false;
     pushLog('scan', 'Scan stopped');
   } catch (error) {
+    state.scanning = true;
     pushLog('error', 'Scan failed', error.message);
+  } finally {
+    state.scanBusy = false;
+    render();
   }
 }
 

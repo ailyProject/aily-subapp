@@ -208,10 +208,9 @@ function createBleDebuggerCore(options = {}) {
   async function startScan(options = {}) {
     const serviceUuids = normalizeUuidList(options.serviceUuids);
     const allowDuplicates = options.allowDuplicates !== false;
+    const waitMs = numberOption(options.waitMs, 10000, 100);
 
-    if (noble.state !== 'poweredOn') {
-      throw new Error(`Bluetooth adapter is ${noble.state || 'unknown'}`);
-    }
+    await waitForPoweredOn(waitMs);
 
     if (scanning) {
       await stopScan();
@@ -226,6 +225,8 @@ function createBleDebuggerCore(options = {}) {
     if (!scanning) {
       return { scanning: false };
     }
+    scanning = false;
+    emit('scanStop', { scanning });
     await callAsync(noble, 'stopScanningAsync', 'stopScanning', []);
     scanning = false;
     return { scanning };

@@ -180,16 +180,18 @@ textarea {
 .network-debugger {
   display: flex;
   flex-direction: column;
+  gap: 10px;
   height: 100%;
   min-height: 0;
+  padding: 10px;
   background: var(--bg);
 }
 
 .mode-tabs {
   display: flex;
+  flex-shrink: 0;
   gap: 6px;
   min-height: 40px;
-  margin: 10px 10px 0;
   padding: 7px 8px;
   border-radius: 5px;
   background: var(--panel);
@@ -197,16 +199,21 @@ textarea {
 
 .debugger-grid {
   display: grid;
-  grid-template-columns: minmax(260px, 0.9fr) minmax(320px, 1.1fr);
-  grid-template-rows: minmax(0, 1fr) 150px;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas:
+    "request response"
+    "log log";
+  gap: 8px;
   min-height: 0;
   flex: 1;
-  padding: 10px;
+  overflow: hidden;
 }
 
 .websocket-grid {
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas:
+    "request log"
+    "request log";
 }
 
 .panel {
@@ -220,11 +227,19 @@ textarea {
 }
 
 .log-panel {
-  grid-column: 1 / -1;
+  grid-area: log;
 }
 
 .log-panel.wide {
-  grid-column: auto;
+  grid-area: log;
+}
+
+.request-panel {
+  grid-area: request;
+}
+
+.response-panel {
+  grid-area: response;
 }
 
 .panel-title,
@@ -377,6 +392,10 @@ pre {
   color: var(--primary);
 }
 
+.log-row.system .label {
+  color: var(--warn);
+}
+
 .status {
   font-size: 12px;
   font-weight: 600;
@@ -387,14 +406,47 @@ pre {
   color: var(--ok);
 }
 
-@media (max-width: 760px) {
+@media (max-width: 750px), (max-height: 820px) {
   .debugger-grid,
   .websocket-grid {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(260px, 1fr) 150px;
+    display: flex;
+    flex-direction: column;
+    grid-template-areas: none;
+    overflow-y: auto;
   }
 
-  .log-panel.wide {
-    grid-column: 1 / -1;
+  .panel {
+    flex-shrink: 0;
+    min-height: auto;
+    overflow: visible;
+  }
+
+  .log-list,
+  .header-list {
+    min-height: 96px;
+    max-height: min(220px, 28vh);
+  }
+
+  .result-block {
+    flex: 0 0 auto;
+  }
+
+  .result-block.headers {
+    flex-basis: auto;
+  }
+
+  .body-input,
+  textarea {
+    min-height: 56px;
+    max-height: 120px;
+  }
+
+  .field.grow {
+    flex: 0 0 auto;
+  }
+
+  pre {
+    min-height: 96px;
+    max-height: min(220px, 28vh);
   }
 }
