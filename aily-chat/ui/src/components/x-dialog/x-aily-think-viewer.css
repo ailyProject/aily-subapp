@@ -1,0 +1,40 @@
+.ac-think { position: relative; min-width: 0; margin: 2px 0; color: var(--chat-fg, #ccc); }
+.ac-think.embedded { margin: 0; }
+.ac-think-header {
+  display: flex; width: 100%; align-items: center; gap: 6px; padding: 3px 4px;
+  border: 0; border-radius: 5px; color: var(--chat-fg-dim, #8e8e8e);
+  background: transparent; font-size: 13px; text-align: left; cursor: pointer;
+  transition: background .15s;
+}
+.ac-think-header:hover { background: var(--chat-bg-hover, rgba(255,255,255,.06)); }
+.ac-think-icon { width: 14px; flex: none; color: var(--chat-fg-muted, #6a6a6a); font-size: 12px; text-align: center; }
+.ac-think-icon.loading { color: var(--chat-info, #75beff); }
+.ac-think-icon.done { color: var(--chat-success, #89d185); }
+.ac-think-label { color: var(--chat-fg-dim, #8e8e8e); font-size: 13px; line-height: 1.4; }
+.ac-think-arrow { margin-left: auto; color: var(--chat-fg-muted, #6a6a6a); font-size: 10px; transition: transform .15s ease; }
+.ac-think.expanded .ac-think-arrow { transform: rotate(180deg); }
+.ac-think-body {
+  position: relative; max-height: 200px; padding: 4px 2px 6px 20px; margin-top: 2px;
+  overflow-x: hidden; overflow-y: auto; scrollbar-width: thin;
+  scrollbar-color: var(--chat-border, rgba(255,255,255,.10)) transparent;
+  scrollbar-gutter: stable; user-select: text;
+}
+.ac-think-body::before {
+  position: absolute; top: 0; bottom: 0; left: 9px; width: 1px; content: "";
+  background: var(--chat-border, rgba(255,255,255,.10));
+  mask-image: linear-gradient(to bottom, transparent 0, #000 8px, #000 calc(100% - 8px), transparent 100%);
+}
+.ac-think.expanded:not(.embedded) .ac-think-header::after {
+  position: absolute; top: 20px; left: 9px; width: 6px; height: 10px; content: "";
+  border-bottom: 1px solid var(--chat-border, rgba(255,255,255,.10));
+  border-left: 1px solid var(--chat-border, rgba(255,255,255,.10)); border-bottom-left-radius: 4px;
+}
+.ac-think.embedded .ac-think-body { max-height: none; padding: 0 12px 0 0; margin: 0; overflow: visible; scrollbar-gutter: auto; }
+.ac-think.embedded .ac-think-body::before { content: none; }
+.ac-think-body .x-aily-markdown-viewer { min-width: 0; max-width: 100%; overflow-wrap: anywhere; word-break: break-word; }
+@keyframes ac-think-shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+.ac-think-shimmer {
+  color: transparent; background: linear-gradient(90deg, var(--chat-fg-dim) 0 30%, var(--chat-shimmer, #4fc3f7) 50%, var(--chat-fg-dim) 70% 100%);
+  background-size: 400% 100%; background-clip: text; animation: ac-think-shimmer 2s linear infinite;
+}
+.ac-spin { display: inline-block; animation: spin .8s linear infinite; }

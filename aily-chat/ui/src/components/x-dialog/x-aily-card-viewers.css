@@ -1,0 +1,33 @@
+.x-aily-inline-card,
+.x-aily-plan-card {
+  margin: 6px 0; overflow: hidden; border: 1px solid var(--aily-border-secondary);
+  border-radius: 7px; background: rgba(255, 255, 255, 0.025);
+}
+.x-aily-inline-card > header,
+.x-aily-plan-card > header {
+  display: flex; min-height: 34px; align-items: center; gap: 7px; padding: 0 10px;
+  border-bottom: 1px solid var(--aily-border-secondary);
+}
+.x-aily-inline-card p,
+.x-aily-plan-card-body,
+.question-item { padding: 9px 10px; margin: 0; }
+.x-aily-inline-card footer,
+.x-aily-plan-card footer {
+  display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px;
+  border-top: 1px solid var(--aily-border-secondary);
+}
+.x-aily-inline-card button,
+.x-aily-plan-card button,
+.choice-list button {
+  min-height: 28px; padding: 0 9px; border: 1px solid var(--aily-border-primary);
+  border-radius: 5px; color: inherit; background: transparent; cursor: pointer;
+}
+.x-aily-inline-card button.primary,
+.x-aily-plan-card button.primary { color: #fff; border-color: #007fd4; background: #007fd4; }
+.x-aily-inline-card button.danger { color: var(--aily-color-danger); }
+.choice-list { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
+.choice-list button {
+  display: flex; height: auto; min-height: 34px; flex-direction: column;
+  align-items: flex-start; justify-content: center; text-align: left;
+}
+.choice-list small { color: var(--aily-text-muted); }

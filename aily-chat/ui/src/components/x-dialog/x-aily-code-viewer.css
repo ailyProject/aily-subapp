@@ -1,0 +1,55 @@
+.x-aily-code-viewer {
+  position: relative;
+  min-width: 0;
+  padding: .5em 0;
+}
+
+.x-aily-code-viewer pre {
+  margin: 0;
+  padding: 12px;
+  overflow-x: auto;
+  border: 1px solid var(--aily-chat-viewer-code-border, #444);
+  border-radius: 5px;
+  background: var(--aily-chat-viewer-code-bg, #0d1117);
+  scrollbar-width: thin;
+  scrollbar-color: var(--aily-chat-viewer-scrollbar, rgba(255,255,255,.2)) transparent;
+}
+
+.x-aily-code-viewer pre code {
+  padding: 0;
+  color: var(--aily-chat-viewer-code-fg, #abb2bf);
+  background: transparent;
+  font: 12px/1.4 Consolas, Monaco, "Courier New", monospace;
+  white-space: pre;
+}
+
+.x-aily-inline-code {
+  padding: 0;
+  border-radius: 5px;
+  color: var(--aily-chat-viewer-inline-code, #ffbd08);
+  background: transparent;
+  font: 12px Consolas, Monaco, "Courier New", monospace;
+}
+
+.x-aily-code-language {
+  position: absolute;
+  z-index: 1;
+  top: 9px;
+  right: 8px;
+  color: var(--chat-fg-muted, #6a6a6a);
+  font-size: 10px;
+  pointer-events: none;
+}
+
+.x-aily-code-viewer[data-streaming="true"] pre::after {
+  display: inline-block;
+  width: 5px;
+  height: 13px;
+  margin-left: 2px;
+  vertical-align: -2px;
+  content: "";
+  background: var(--chat-info, #75beff);
+  animation: code-caret 1s steps(1) infinite;
+}
+
+@keyframes code-caret { 50% { opacity: 0; } }

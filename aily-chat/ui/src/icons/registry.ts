@@ -1,0 +1,67 @@
+/**
+ * Font Awesome Pro Light icons used by the Aily Chat React sub-app.
+ * Add new icon names here, then run `npm run build:icons` to refresh the CSS subset.
+ */
+export const FA_LIGHT_ICONS = [
+  'arrow-down',
+  'arrow-left',
+  'arrow-up',
+  'arrow-up-right-from-square',
+  'book-open',
+  'broom-wide',
+  'chevron-down',
+  'chevron-left',
+  'chevron-right',
+  'chevron-up',
+  'circle',
+  'circle-check',
+  'circle-exclamation',
+  'circle-info',
+  'circle-minus',
+  'circle-pause',
+  'circle-question',
+  'circle-xmark',
+  'code-branch',
+  'comment-smile',
+  'copy',
+  'cube',
+  'ellipsis',
+  'file',
+  'file-circle-plus',
+  'folder',
+  'forward-step',
+  'gauge-simple-high',
+  'gear',
+  'hourglass-clock',
+  'id-card',
+  'link',
+  'list-check',
+  'magnifying-glass',
+  'message-lines',
+  'paper-plane',
+  'pen',
+  'pen-line',
+  'pen-to-square',
+  'plus',
+  'rotate-left',
+  'rotate-right',
+  'shield-check',
+  'shield-exclamation',
+  'spinner-third',
+  'star-christmas',
+  'stop',
+  'terminal',
+  'thumbs-down',
+  'thumbs-up',
+  'trash',
+  'triangle-exclamation',
+  'user-astronaut',
+  'window-minimize',
+  'xmark',
+] as const;
+
+export type FaLightIconName = (typeof FA_LIGHT_ICONS)[number];
+
+export function faLight(icon: FaLightIconName): string {
+  return `fa-light fa-${icon}`;
+}

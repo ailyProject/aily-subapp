@@ -1,0 +1,12 @@
+.x-aily-markdown-viewer {
+  color: var(--aily-text-tertiary);
+  line-height: 1.62;
+}
+
+.x-aily-markdown-viewer p {
+  margin: 0 0 8px;
+  white-space: pre-wrap;
+}
+
+.x-aily-markdown-viewer p:last-child { margin-bottom: 0; }
+.x-aily-markdown-viewer > .x-aily-code-viewer { margin: .5em 0; }

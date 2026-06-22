@@ -1,0 +1,23 @@
+{
+  "name": "@aily-project/subapp-{{tool-id}}",
+  "version": "0.1.0",
+  "private": true,
+  "description": "{{tool-description}} backend for Aily Blockly",
+  "main": "index.js",
+  "bin": {
+    "aily-{{tool-id}}": "index.js"
+  },
+  "scripts": {
+    "start": "node index.js rpc",
+    "serve": "node index.js serve",
+    "build:ui": "node scripts/build-ui.mjs",
+    "install:ui": "npm install --prefix ui",
+    "cli": "node index.js",
+    "status": "node index.js status",
+    "echo": "node index.js echo"
+  },
+  "dependencies": {
+    "penpal": "^7.0.6",
+    "ws": "^8.21.0"
+  }
+}

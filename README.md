@@ -2,7 +2,7 @@
 
 这个仓库用于维护 Aily Blockly 可加载的独立子应用工具。这里的“子应用”是一个独立 Node 项目：它自己启动本地 HTTP/WebSocket 服务，浏览器 UI 由 Aily Blockly 通过 iframe 加载，核心能力可以同时提供给 UI、CLI 和 AI 自动化流程。
 
-最新外部子应用开发提示词见 [subapp-development.md](subapp-development.md)，工程细节规范见 [tool-development-spec.md](tool-development-spec.md)。可复制模板见 [templates/subapp](templates/subapp)、[templates/subapp-angular](templates/subapp-angular)、[templates/subapp-vue](templates/subapp-vue)，现有工具和模板说明见 [subapp-development-template.md](subapp-development-template.md)。
+最新外部子应用开发提示词见 [subapp-development.md](subapp-development.md)，工程细节规范见 [tool-development-spec.md](tool-development-spec.md)。可复制模板见 [templates/subapp](templates/subapp)、[templates/subapp-angular](templates/subapp-angular)、[templates/subapp-vue](templates/subapp-vue)、[templates/subapp-react](templates/subapp-react)，现有工具和模板说明见 [subapp-development-template.md](subapp-development-template.md)。
 
 ## 什么时候做子应用
 
@@ -56,6 +56,7 @@ Copy-Item -Recurse templates/subapp sensor-debugger
 - `templates/subapp`: 纯 HTML/CSS/JS UI，适合轻量工具。
 - `templates/subapp-angular`: Angular UI，结构参考 `serial-debugger/ui`，需要额外安装 `sensor-debugger/ui` 依赖。
 - `templates/subapp-vue`: Vue/Vite UI，需要额外安装 `sensor-debugger/ui` 依赖。
+- `templates/subapp-react`: React/Vite UI，内置类型安全的宿主控制面、WebSocket RPC、主题/i18n 和草稿生命周期。
 
 复制后先替换模板占位符：
 
