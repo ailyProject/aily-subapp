@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const nodeTarget = 'node18';
-const assetDirs = ['ui', 'i18n', 'skill'];
+const assetDirs = ['ui', 'i18n', 'assets', 'skill'];
 const vendorFiles = [
   {
     from: ['node_modules', 'penpal', 'dist', 'penpal.min.js'],

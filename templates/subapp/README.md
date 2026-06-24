@@ -35,7 +35,8 @@ npm run build -- {{tool-id}}
 - `index.js`: selects `rpc`, `serve`, or CLI mode.
 - `core.js`: owns the real tool behavior and is independent from UI/HTTP.
 - `cli.js`: parses arguments and writes one JSON object for every non-help command.
-- `server.js`: serves `ui/`, exposes `/ws`, validates `token`, and handles `/health` plus `/api/shutdown`.
+- `server.js`: serves `ui/`, `i18n/`, and `assets/`, exposes `/ws`, validates `token`, and handles `/health` plus `/api/shutdown`.
 - `ui/`: browser-only interface. It reads `token`, `lang`, and `theme` from the URL.
 - `i18n/`: child-tool language bundles for `en`, `zh_cn`, and `zh_hk`; app metadata uses `TITLE` and `DESCRIPTION`.
+- `assets/`: tool-owned static resources loaded through `/assets/<path>`.
 - `skill/`: optional AI workflow instructions for using this tool.

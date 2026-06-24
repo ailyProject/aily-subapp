@@ -18,7 +18,7 @@ const ignoredDirectoryNames = new Set([
   'node_modules',
   'vendor'
 ]);
-const frontendTopLevelDirs = new Set(['ui', 'i18n']);
+const frontendTopLevelDirs = new Set(['ui', 'i18n', 'assets']);
 const backendRootFiles = new Set([
   'cli.js',
   'core.js',

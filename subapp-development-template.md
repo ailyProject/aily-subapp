@@ -30,9 +30,11 @@
     en.json
     zh_cn.json
     ...
+  assets/
+    ... tool-owned static resources
   ui/
     index.html      # required host entry
-    ... static files, framework bundles, or assets referenced by index.html
+    ... static files, framework bundles, or UI assets referenced by index.html
   skill/
     <skill-name>/
       SKILL.md
@@ -47,13 +49,14 @@
 - stdout 输出一行 `{"event":"ready","data":{...}}`，其中包含 `url`、`wsUrl`、`shutdownUrl`、`port`、`pid`。
 - UI 从 URL 读取 `token`、`lang`、`theme`，先完成基础渲染，再通过 WebSocket 调后端。
 - UI 通过 `/i18n/<lang>.json` 加载语言包，服务端同时兼容 `/tools/<tool-id>/i18n/<lang>.json`，并在首屏和 `setHostContext` 中响应 `theme`。
+- 工具自己的业务静态资源放在 `assets/`，UI 通过 `/assets/<path>` 加载，服务端同时兼容 `/tools/<tool-id>/assets/<path>`。
 - iframe 与宿主之间只用 Penpal 做控制面通信，例如 `childReady`、`childError`、`setHostContext`、`beforeClose`。
 - 高频数据、硬件事件、日志流、RPC 请求都走子应用自己的 `/ws?token=...`。
 
 根仓库脚本：
 
-- `npm run dev -- <tool-id>`：由 `scripts/dev-tool.mjs` 启动单个工具，注入 `lang/theme`，监听 `ui/`、`i18n/` 热刷新，后端文件变更后自动重启。
-- `npm run build -- <tool-id>`：由 `scripts/build-tools.mjs` 用 esbuild 打包 Node 入口，并复制 `i18n`、`skill` 和 Penpal vendor；没有 `build:ui` 时复制 `ui`，有 `build:ui` 时运行该脚本生成静态 UI。
+- `npm run dev -- <tool-id>`：由 `scripts/dev-tool.mjs` 启动单个工具，注入 `lang/theme`，监听 `ui/`、`i18n/`、`assets/` 热刷新，后端文件变更后自动重启。
+- `npm run build -- <tool-id>`：由 `scripts/build-tools.mjs` 用 esbuild 打包 Node 入口，并复制 `i18n`、`assets`、`skill` 和 Penpal vendor；没有 `build:ui` 时复制 `ui`，有 `build:ui` 时运行该脚本生成静态 UI。
 
 ## 3. 开发模板
 
@@ -145,6 +148,7 @@ npm run build -- <tool-id>
 - 先明确工具边界：哪些能力放 `core.js`，哪些交互放 UI，哪些命令要暴露给 AI/脚本 CLI。
 - 创建工具目录并替换模板占位符。
 - 添加 `i18n/en.json`、`i18n/zh_cn.json` 和 `i18n/zh_hk.json`，后续再补齐其它 locale。
+- 如有业务静态资源，放入本工具 `assets/`，并通过 `/assets/<path>` 读取。
 - 如果需要硬件或原生模块，把依赖放在子应用自己的 `package.json`，不要依赖根项目。
 - 在 `server.js` 中新增 RPC method 映射，在 `core.js` 中实现真实能力。
 - 在 `cli.js` 中为关键能力提供 JSON CLI。

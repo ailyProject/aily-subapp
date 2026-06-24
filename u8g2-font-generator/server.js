@@ -6,9 +6,9 @@ const http = require('http');
 const path = require('path');
 const { URL } = require('url');
 const { WebSocketServer, WebSocket } = require('ws');
-const { asError, createToolCore } = require('./core');
+const { asError, createU8g2FontGeneratorCore } = require('./core');
 
-const TOOL_ID = '{{tool-id}}';
+const TOOL_ID = 'u8g2-font-generator';
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -18,6 +18,9 @@ const MIME_TYPES = {
   '.woff2': 'font/woff2',
   '.woff': 'font/woff',
   '.ttf': 'font/ttf',
+  '.otf': 'font/otf',
+  '.ttc': 'font/collection',
+  '.otc': 'font/collection',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon'
@@ -178,7 +181,42 @@ function createRpcMessage(id, ok, result = {}, error = '') {
   return { id, ok, result, error };
 }
 
-async function startToolServer(options = {}) {
+function fontIdFromPathname(pathname) {
+  const match = pathname.match(/^\/api\/font\/([a-f0-9]{16})$/i);
+  return match ? match[1] : '';
+}
+
+function listFontsWithUrls(core, token) {
+  const result = core.listFonts();
+  return {
+    ...result,
+    fonts: result.fonts.map(font => ({
+      ...font,
+      url: `/api/font/${font.id}?token=${encodeURIComponent(token)}`
+    }))
+  };
+}
+
+function serveFont(core, requestUrl, response, token) {
+  if (!verifyToken(requestUrl, token)) {
+    sendJson(response, 403, { ok: false, error: 'Invalid token' });
+    return true;
+  }
+
+  const fontId = fontIdFromPathname(requestUrl.pathname);
+  if (!fontId) return false;
+
+  const font = core.getFontById(fontId);
+  if (!font) {
+    sendJson(response, 404, { ok: false, error: 'Font not found' });
+    return true;
+  }
+
+  serveFile(font.path, response);
+  return true;
+}
+
+async function startU8g2FontGeneratorServer(options = {}) {
   const host = options.host || '127.0.0.1';
   const port = Number.isFinite(Number(options.port)) ? Number(options.port) : 0;
   const token = options.token || createToken();
@@ -196,7 +234,7 @@ async function startToolServer(options = {}) {
     }
   };
 
-  const core = createToolCore({
+  const core = createU8g2FontGeneratorCore({
     sendEvent: (event, data = {}) => broadcast({ event, data })
   });
 
@@ -208,7 +246,7 @@ async function startToolServer(options = {}) {
 
     await core.shutdown().catch(() => undefined);
     for (const client of clients) {
-      client.close(1001, '{{Tool Name}} server closed');
+      client.close(1001, 'U8g2 font generator server closed');
     }
 
     await new Promise(resolve => wss.close(resolve));
@@ -222,10 +260,16 @@ async function startToolServer(options = {}) {
     const method = message.method || message.action;
 
     try {
-      const result = await core.executeAction({
-        action: method,
-        params: message.params || message.data || {}
-      });
+      let result;
+      if (method === 'fonts.list' || method === 'fonts') {
+        result = listFontsWithUrls(core, token);
+      } else {
+        result = await core.executeAction({
+          action: method,
+          params: message.params || message.data || {}
+        });
+      }
+
       socket.send(JSON.stringify(createRpcMessage(id, true, result)));
       if (method === 'shutdown') {
         await stop();
@@ -277,6 +321,19 @@ async function startToolServer(options = {}) {
     if (requestUrl.pathname === '/health') {
       sendJson(response, 200, { ok: true, state: core.status().state });
       return;
+    }
+
+    if (requestUrl.pathname === '/api/fonts') {
+      if (!verifyToken(requestUrl, token)) {
+        sendJson(response, 403, { ok: false, error: 'Invalid token' });
+        return;
+      }
+      sendJson(response, 200, { ok: true, ...listFontsWithUrls(core, token) });
+      return;
+    }
+
+    if (requestUrl.pathname.startsWith('/api/font/')) {
+      if (serveFont(core, requestUrl, response, token)) return;
     }
 
     if (requestUrl.pathname === '/api/shutdown') {
@@ -334,5 +391,5 @@ async function startToolServer(options = {}) {
 }
 
 module.exports = {
-  startToolServer
+  startU8g2FontGeneratorServer
 };

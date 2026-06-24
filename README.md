@@ -28,6 +28,7 @@
   server.js
   readme.md
   i18n/
+  assets/
   ui/
   skill/
 ```
@@ -89,7 +90,7 @@ npm run dev -- sensor-debugger --lang en --theme light
 npm run dev -- sensor-debugger --port 18450 --reload-port 19450
 ```
 
-开发脚本会调用工具自己的 `node index.js serve`，并模拟主应用传入的 `lang`、`theme`。修改 `ui/` 或 `i18n/` 会刷新页面；修改 `index.js`、`server.js`、`core.js`、`cli.js`、`package.json` 等后端文件会重启服务。
+开发脚本会调用工具自己的 `node index.js serve`，并模拟主应用传入的 `lang`、`theme`。修改 `ui/`、`i18n/` 或 `assets/` 会刷新页面；修改 `index.js`、`server.js`、`core.js`、`cli.js`、`package.json` 等后端文件会重启服务。
 
 ## 核心分层
 
@@ -101,6 +102,7 @@ npm run dev -- sensor-debugger --port 18450 --reload-port 19450
 - `server.js`: 提供本地 HTTP 静态资源、`/ws` JSON-RPC、`/health`、`/api/shutdown` 和 token 校验。
 - `ui/`: 浏览器页面，不直接使用 Node/Electron API。
 - `i18n/`: 子应用自己的语言包，至少提供 `en.json`、`zh_cn.json`，建议同时提供 `zh_hk.json`。
+- `assets/`: 子应用自己的业务静态资源，例如字库、示例数据、WASM 辅助数据等；通过 `/assets/<path>` 加载。
 - `skill/`: 可选的 AI 工作流说明，建议同时保留 `SKILL.md` 和 `skill_zh.md`。
 
 不要把工具核心逻辑分散复制到 UI、CLI 和 HTTP 层。先把能力写进 `core.js`，再由 CLI 和 WebSocket RPC 调用它。
@@ -184,6 +186,7 @@ WebSocket 适合做：
 - 不直接 `require` Node 模块。
 - 没有父页面 Penpal host 时也能完成基础渲染和后端连接。
 - 从 `/i18n/<lang>.json` 加载语言包，缺失时回退到 `/i18n/en.json`。
+- 从 `/assets/<path>` 加载本工具业务静态资源；不要把这类资源散落在仓库根目录或其它子应用目录。
 - 首屏先读取 URL `theme` 并应用主题；`setHostContext({ theme })` 到达后同步切换主题。
 - 纯静态 UI 推荐用 `styles.css` 放布局、尺寸、状态等通用规则，用 `light.css` 和 `dark.css` 放颜色变量或主题覆盖。
 - Angular、Vue、React、Vite 等框架 UI 不强制存在 `app.js`、`light.css` 或 `dark.css`；构建后的 `ui/index.html` 能正确引用 JS/CSS/assets，且视觉上能响应 light/dark 即可。
@@ -251,7 +254,7 @@ npm run build
 
 - 自动发现根目录下带 `package.json` 的工具项目。
 - 使用 esbuild 打包 Node 入口。
-- 复制 `i18n/`、`skill/` 和 Penpal vendor；没有 `build:ui` 时复制 `ui/`，有 `build:ui` 时运行该脚本生成静态 UI。
+- 复制 `i18n/`、`assets/`、`skill/` 和 Penpal vendor；没有 `build:ui` 时复制 `ui/`，有 `build:ui` 时运行该脚本生成静态 UI。
 - 为原生运行时依赖保留必要安装内容。
 - 汇总所有工具到根目录 `dist/`。
 - 根据 `index-backup.json` 和当前构建结果生成 `dist/index.json`。
@@ -293,6 +296,7 @@ node sensor-debugger/index.js serve --host 127.0.0.1 --port 0
 - stdout 输出 `ready` JSON。
 - `ready.url` 追加 `lang`、`theme` 后能打开 UI。
 - `/i18n/<lang>.json` 和 `/tools/<tool-id>/i18n/<lang>.json` 可加载，缺失语言能回退到 `en.json`。
+- 如果工具有 `assets/`，`/assets/<path>` 和 `/tools/<tool-id>/assets/<path>` 都应可加载。
 - `theme=light` 和 `theme=dark` 都能呈现正确主题；框架构建 UI 不要求独立 `light.css` / `dark.css` 文件。
 - `/ws?token=...` 能连接并执行 `status`。
 
@@ -312,9 +316,10 @@ npm run build -- sensor-debugger
 4. 在 `cli.js` 中暴露关键命令，并保证 JSON 输出。
 5. 在 `server.js` 中添加 WebSocket RPC method 和事件广播。
 6. 在 `ui/` 中实现浏览器页面，接入 token、i18n、theme、Penpal 和 WebSocket。
-7. 在 `index-backup.json` 中添加登记信息。
-8. 执行语法、CLI、serve 和构建检查。
-9. 将 `dist/` 产物交给 Aily Blockly 宿主验证 iframe/Penpal 生命周期。
+7. 将子应用需要的业务静态资源放入本工具 `assets/`，并通过 `/assets/<path>` 访问。
+8. 在 `index-backup.json` 中添加登记信息。
+9. 执行语法、CLI、serve 和构建检查。
+10. 将 `dist/` 产物交给 Aily Blockly 宿主验证 iframe/Penpal 生命周期。
 
 ## 常见踩坑
 

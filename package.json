@@ -9,7 +9,9 @@
     "dev:mqtt": "node scripts/dev-tool.mjs mqtt-debugger",
     "dev:network": "node scripts/dev-tool.mjs network-debugger",
     "dev:serial": "node scripts/dev-tool.mjs serial-debugger",
+    "dev:u8g2-font": "node scripts/dev-tool.mjs u8g2-font-generator",
     "build": "node scripts/build-tools.mjs",
+    "build:u8g2-font": "node scripts/build-tools.mjs u8g2-font-generator",
     "build:tools": "node scripts/build-tools.mjs"
   },
   "devDependencies": {

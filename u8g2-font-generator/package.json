@@ -1,0 +1,21 @@
+{
+  "name": "@aily-project/subapp-u8g2-font-generator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Generate U8g2 font source files from local fonts",
+  "main": "index.js",
+  "bin": {
+    "aily-u8g2-font-generator": "index.js"
+  },
+  "scripts": {
+    "start": "node index.js rpc",
+    "serve": "node index.js serve",
+    "cli": "node index.js",
+    "status": "node index.js status",
+    "fonts": "node index.js fonts"
+  },
+  "dependencies": {
+    "penpal": "^7.0.6",
+    "ws": "^8.21.0"
+  }
+}

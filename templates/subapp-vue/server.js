@@ -14,6 +14,7 @@ const MIME_TYPES = {
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
   '.woff2': 'font/woff2',
   '.woff': 'font/woff',
   '.ttf': 'font/ttf',
@@ -38,7 +39,12 @@ function sendJson(response, statusCode, payload) {
 
 function safeStaticPath(uiRoot, requestPath) {
   const pathname = requestPath === '/' ? '/index.html' : requestPath;
-  const decoded = decodeURIComponent(pathname);
+  let decoded = '';
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    return null;
+  }
   if (decoded.includes('\0')) return null;
 
   const resolvedRoot = path.resolve(uiRoot);
@@ -58,10 +64,37 @@ function i18nPathFromRequest(requestPath) {
   return path.join(__dirname, 'i18n', match[1]);
 }
 
+function assetPathFromRequest(requestPath) {
+  const match = requestPath.match(new RegExp(`^/(?:tools/${TOOL_ID}/)?assets/(.+)$`));
+  if (!match) return '';
+
+  let decoded = '';
+  try {
+    decoded = decodeURIComponent(match[1]);
+  } catch {
+    return '';
+  }
+  if (decoded.includes('\0')) return '';
+
+  const assetsRoot = path.resolve(__dirname, 'assets');
+  const filePath = path.resolve(path.join(assetsRoot, decoded));
+  const relative = path.relative(assetsRoot, filePath);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) return '';
+  return filePath;
+}
+
 function penpalVendorPath() {
   const bundledPath = path.join(__dirname, 'vendor', 'penpal.min.js');
   if (fs.existsSync(bundledPath)) return bundledPath;
   return path.join(__dirname, 'node_modules', 'penpal', 'dist', 'penpal.min.js');
+}
+
+function requestUrlFrom(request) {
+  try {
+    return new URL(request.url || '/', `http://${request.headers.host || '127.0.0.1'}`);
+  } catch {
+    return null;
+  }
 }
 
 function defaultUiRoot() {
@@ -74,7 +107,13 @@ function defaultUiRoot() {
 }
 
 function serveStatic(uiRoot, request, response) {
-  const requestUrl = new URL(request.url || '/', 'http://127.0.0.1');
+  const requestUrl = requestUrlFrom(request);
+  if (!requestUrl) {
+    response.writeHead(400);
+    response.end('Bad Request');
+    return;
+  }
+
   if (requestUrl.pathname === '/vendor/penpal.min.js') {
     serveFile(penpalVendorPath(), response);
     return;
@@ -83,6 +122,12 @@ function serveStatic(uiRoot, request, response) {
   const i18nPath = i18nPathFromRequest(requestUrl.pathname);
   if (i18nPath) {
     serveFile(i18nPath, response);
+    return;
+  }
+
+  const assetPath = assetPathFromRequest(requestUrl.pathname);
+  if (assetPath) {
+    serveFile(assetPath, response);
     return;
   }
 
@@ -226,7 +271,12 @@ async function startToolServer(options = {}) {
   });
 
   server = http.createServer((request, response) => {
-    const requestUrl = new URL(request.url || '/', `http://${host}`);
+    const requestUrl = requestUrlFrom(request);
+    if (!requestUrl) {
+      response.writeHead(400);
+      response.end('Bad Request');
+      return;
+    }
 
     if (request.method === 'OPTIONS') {
       sendJson(response, 204, {});
@@ -252,7 +302,12 @@ async function startToolServer(options = {}) {
   });
 
   server.on('upgrade', (request, socket, head) => {
-    const requestUrl = new URL(request.url || '/', `http://${host}`);
+    const requestUrl = requestUrlFrom(request);
+    if (!requestUrl) {
+      socket.destroy();
+      return;
+    }
+
     if (requestUrl.pathname !== '/ws' || !verifyToken(requestUrl, token)) {
       socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
       socket.destroy();
