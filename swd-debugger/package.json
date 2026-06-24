@@ -1,0 +1,23 @@
+{
+  "name": "@aily-project/subapp-swd-debugger",
+  "version": "0.1.0",
+  "private": true,
+  "description": "probe-rs SWD debugger backend for Aily Blockly",
+  "main": "index.js",
+  "bin": {
+    "aily-swd-debugger": "index.js"
+  },
+  "scripts": {
+    "start": "node index.js rpc",
+    "serve": "node index.js serve",
+    "cli": "node index.js",
+    "status": "node index.js status",
+    "list": "node index.js list",
+    "info": "node index.js info",
+    "auto": "node index.js auto"
+  },
+  "dependencies": {
+    "penpal": "^7.0.6",
+    "ws": "^8.21.0"
+  }
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "SWD Device Debugger"
+  short_description: "Debug MCU SWD and probe-rs workflows."
+  default_prompt: "Use $swd-device-debugger to debug an MCU SWD workflow."
