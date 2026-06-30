@@ -390,6 +390,87 @@ function packagePath(nodeModulesDir, packageName) {
   return path.join(nodeModulesDir, ...packageName.split('/'));
 }
 
+async function copyPackage(sourceNodeModulesDir, destinationNodeModulesDir, packageName) {
+  const source = packagePath(sourceNodeModulesDir, packageName);
+  const destination = packagePath(destinationNodeModulesDir, packageName);
+
+  if (!(await pathExists(source))) return false;
+
+  await mkdir(path.dirname(destination), { recursive: true });
+  await rm(destination, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  await cp(source, destination, { recursive: true });
+  return true;
+}
+
+function packageLockEntry(project, packageName) {
+  return project.lockJson?.packages?.[lockPackageKey(packageName)] || null;
+}
+
+async function readPackageDependencyNames(nodeModulesDir, packageName) {
+  const packageJsonPath = path.join(packagePath(nodeModulesDir, packageName), 'package.json');
+  if (!(await pathExists(packageJsonPath))) return [];
+
+  const packageJson = await readJson(packageJsonPath);
+  return [
+    ...Object.keys(packageJson.dependencies || {}),
+    ...Object.keys(packageJson.optionalDependencies || {})
+  ];
+}
+
+async function collectRuntimeDependencyNames(project, rootPackageNames) {
+  const sourceNodeModulesDir = path.join(project.dir, 'node_modules');
+  const queued = [...rootPackageNames];
+  const collected = new Set();
+
+  while (queued.length) {
+    const packageName = queued.shift();
+    if (!packageName || collected.has(packageName)) continue;
+    collected.add(packageName);
+
+    const lockEntry = packageLockEntry(project, packageName);
+    const dependencyNames = lockEntry
+      ? [
+          ...Object.keys(lockEntry.dependencies || {}),
+          ...Object.keys(lockEntry.optionalDependencies || {})
+        ]
+      : await readPackageDependencyNames(sourceNodeModulesDir, packageName);
+
+    for (const dependencyName of dependencyNames) {
+      if (!collected.has(dependencyName)) {
+        queued.push(dependencyName);
+      }
+    }
+  }
+
+  return collected;
+}
+
+async function copyRuntimeDependenciesFromSource(project, packageDir, runtimeDependencies) {
+  const sourceNodeModulesDir = path.join(project.dir, 'node_modules');
+  if (!(await pathExists(sourceNodeModulesDir))) return false;
+
+  const destinationNodeModulesDir = path.join(packageDir, 'node_modules');
+  await mkdir(destinationNodeModulesDir, { recursive: true });
+
+  const dependencyNames = await collectRuntimeDependencyNames(
+    project,
+    Object.keys(runtimeDependencies)
+  );
+  let copiedCount = 0;
+
+  for (const packageName of dependencyNames) {
+    if (await copyPackage(sourceNodeModulesDir, destinationNodeModulesDir, packageName)) {
+      copiedCount += 1;
+    }
+  }
+
+  if (!copiedCount) return false;
+
+  console.log(`  copied runtime dependencies from source node_modules (${copiedCount} package${copiedCount === 1 ? '' : 's'})`);
+  await minimizeRuntimeDependencies(packageDir);
+  return true;
+}
+
 function isLicenseFile(fileName) {
   const lowerName = fileName.toLowerCase();
   return (
@@ -611,6 +692,10 @@ async function writeRuntimePackage(project, packageDir) {
 async function installRuntimeDependencies(project, packageDir) {
   const runtimeDependencies = getRuntimeDependencies(project);
   if (!Object.keys(runtimeDependencies).length) return;
+
+  if (await copyRuntimeDependenciesFromSource(project, packageDir, runtimeDependencies)) {
+    return;
+  }
 
   console.log(`  installing runtime dependencies in ${toDisplayPath(packageDir)}`);
   await runCommand(
