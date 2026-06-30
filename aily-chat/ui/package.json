@@ -9,6 +9,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@ant-design/x": "^2.8.0",
+    "@ant-design/x-markdown": "^2.8.0",
+    "antd": "^6.4.5",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },
@@ -16,6 +19,7 @@
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "^4.4.1",
+    "sass": "^1.101.0",
     "typescript": "~5.9.2",
     "vite": "^6.0.0"
   }

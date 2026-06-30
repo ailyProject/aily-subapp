@@ -1,12 +1,21 @@
 import { ChatPart } from '../../protocol';
 import { XAilyMarkdownViewer } from './XAilyMarkdownViewer';
-import './x-aily-activity-viewers.css';
+import './x-aily-activity-viewers.scss';
+
+const LARGE_TOOL_OUTPUT_THRESHOLD = 12_000;
 
 export function XAilyToolViewer({ part }: { part: ChatPart }) {
+  const output = String(part.output || part.content || part.text || '');
   return (
     <div className="x-aily-tool-viewer">
       {part.args !== undefined && <ActivitySection title="输入" value={part.args} />}
-      {(part.output || part.content) && <ActivitySection title="输出"><XAilyMarkdownViewer content={String(part.output || part.content || '')} streaming={part.state === 'doing'} /></ActivitySection>}
+      {output && (
+        <ActivitySection title="输出">
+          {output.length >= LARGE_TOOL_OUTPUT_THRESHOLD
+            ? <pre className="x-aily-tool-output-plain">{output}</pre>
+            : <XAilyMarkdownViewer content={output} streaming={part.state === 'doing'} />}
+        </ActivitySection>
+      )}
       {part.detail && <div className="x-aily-activity-note">{part.detail}</div>}
     </div>
   );

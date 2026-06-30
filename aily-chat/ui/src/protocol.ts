@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 
 export type ThemeName = 'dark' | 'light';
 export type RunState = 'idle' | 'running' | 'waiting' | 'error';
-export type PartState = 'doing' | 'done' | 'warn' | 'error' | 'info';
+export type PartState = 'doing' | 'done' | 'warn' | 'error' | 'info' | 'pending_approval';
 
 export interface HostContext {
   toolId: string;
@@ -11,9 +11,17 @@ export interface HostContext {
   platform: string;
 }
 
+export interface ChatSessionAction {
+  icon: string;
+  action: string;
+  title: string;
+  active?: boolean;
+}
+
 export interface ChatSession {
   id: string;
   title: string;
+  createdAt?: number;
   updatedAt: number;
   unread?: boolean;
   current?: boolean;
@@ -21,6 +29,8 @@ export interface ChatSession {
   detail?: string[];
   pinned?: boolean;
   archived?: boolean;
+  read?: boolean;
+  actions?: ChatSessionAction[];
 }
 
 export interface ChatPart {
@@ -41,6 +51,12 @@ export interface ChatPart {
   progress?: number;
   kind?: string;
   toolName?: string;
+  toolDisplayName?: string;
+  displayTitle?: string;
+  displaySubtitle?: string;
+  displayMeta?: string;
+  displayStatus?: string;
+  displayTone?: string;
   toolCallId?: string;
   resolved?: boolean;
   result?: string;
@@ -59,6 +75,7 @@ export interface ChatPart {
 
 export interface ChatTurn {
   id: string;
+  turnId?: string;
   role: 'user' | 'assistant' | 'aily';
   createdAt: number;
   parts: ChatPart[];
@@ -75,6 +92,8 @@ export interface ChatResource {
   type: 'file' | 'folder' | 'url' | 'block';
   name: string;
   path?: string;
+  blockId?: string;
+  blockContext?: string;
 }
 
 export interface ChatTodo {
@@ -95,10 +114,35 @@ export interface ChatMenuOption {
   id: string;
   label: string;
   description?: string;
+  detail?: string;
   iconClass?: string;
   active?: boolean;
   disabled?: boolean;
   billingLabel?: string;
+  separatorBefore?: boolean;
+  path?: number[];
+  type?: 'item' | 'section';
+  action?: string;
+  children?: ChatMenuOption[];
+}
+
+export const CHAT_CONFIGURE_CUSTOM_AGENTS_ACTION_ID = 'workbench.action.chat.configure.customagents';
+export const CHAT_PICKER_CONFIGURE_CUSTOM_AGENTS_ACTION_ID = 'workbench.action.chat.picker.customagents';
+
+export function menuOptionOpensSettings(option: Pick<ChatMenuOption, 'id' | 'action' | 'label'>): boolean {
+  const action = String(option.action || option.id || '').trim();
+  if (
+    action === CHAT_PICKER_CONFIGURE_CUSTOM_AGENTS_ACTION_ID
+    || action === CHAT_CONFIGURE_CUSTOM_AGENTS_ACTION_ID
+    || action === 'configure-custom-agents'
+  ) {
+    return true;
+  }
+
+  const label = String(option.label || '').trim().toLocaleLowerCase();
+  return label.includes('configure custom agents')
+    || label.includes('自定义代理')
+    || label.includes('自定义配置');
 }
 
 export interface ChatSettings {
@@ -143,7 +187,69 @@ export interface ChatSettings {
   terminalInheritDefaultAllowList: boolean;
 }
 
+export interface ChatRuntimeConfirmationAction {
+  id: string;
+  scope: string;
+  label: string;
+  description?: string;
+  tooltip?: string;
+  disabled?: boolean;
+  isSecondary?: boolean;
+}
+
+export interface ChatRuntimeConfirmation {
+  id: string;
+  kind: 'approval' | 'confirmation';
+  partId: string;
+  toolCallId?: string;
+  toolName?: string;
+  askId?: string;
+  title: string;
+  subtitle?: string;
+  message: string;
+  args?: Record<string, unknown>;
+  actions: ChatRuntimeConfirmationAction[];
+  primaryScope?: string;
+  primaryLabel?: string;
+  rejectLabel?: string;
+}
+
+export interface ChatRuntimeQuestionOption {
+  label: string;
+  description?: string;
+  recommended?: boolean;
+}
+
+export interface ChatRuntimeQuestionItem {
+  question: string;
+  options: ChatRuntimeQuestionOption[];
+  allowFreeform?: boolean;
+  multiSelect?: boolean;
+}
+
+export interface ChatRuntimeQuestion {
+  partId: string;
+  questions: ChatRuntimeQuestionItem[];
+}
+
+export interface ChatRuntimePlanAction {
+  id: string;
+  label: string;
+  description?: string;
+  default?: boolean;
+}
+
+export interface ChatRuntimePlanReview {
+  id: string;
+  title: string;
+  content: string;
+  planUri?: string;
+  canProvideFeedback?: boolean;
+  actions: ChatRuntimePlanAction[];
+}
+
 export interface ChatBootstrap {
+  theme?: ThemeName;
   sessions: ChatSession[];
   activeSessionId: string | null;
   turns: ChatTurn[];
@@ -151,9 +257,12 @@ export interface ChatBootstrap {
   models: Array<{ id: string; label: string }>;
   activeModelId: string;
   permissionMode: 'default' | 'full';
+  permissionPreset?: 'default' | 'auto_review' | 'full';
   paneSurface?: 'chat' | 'blank-session' | 'session-loading' | 'entry' | 'welcome' | 'login';
   sessionListMode?: 'hidden' | 'stacked' | 'sidebar';
   sessionSidebarWidth?: number;
+  sessionSidebarResizeMinWidth?: number;
+  sessionSidebarMaxWidth?: number;
   title?: string;
   inputValue?: string;
   resources?: ChatResource[];
@@ -170,6 +279,10 @@ export interface ChatBootstrap {
   requestQuota?: { label?: string; detail?: string } | null;
   showSettings?: boolean;
   settings?: ChatSettings;
+  pendingConfirmations?: ChatRuntimeConfirmation[];
+  activeConfirmationIndex?: number;
+  pendingQuestion?: ChatRuntimeQuestion | null;
+  pendingPlanReview?: ChatRuntimePlanReview | null;
 }
 
 export interface ProtocolEvent {
@@ -232,9 +345,12 @@ let state: ChatState = {
   models: [],
   activeModelId: '',
   permissionMode: 'default',
+  permissionPreset: 'default',
   paneSurface: 'entry',
   sessionListMode: 'stacked',
   sessionSidebarWidth: 280,
+  sessionSidebarResizeMinWidth: 240,
+  sessionSidebarMaxWidth: 420,
   title: '',
   inputValue: '',
   resources: [],
@@ -251,6 +367,10 @@ let state: ChatState = {
   requestQuota: null,
   showSettings: false,
   settings: undefined,
+  pendingConfirmations: [],
+  activeConfirmationIndex: 0,
+  pendingQuestion: null,
+  pendingPlanReview: null,
 };
 
 export function useChatState(): ChatState {
@@ -261,6 +381,10 @@ export function useChatState(): ChatState {
     },
     () => state,
   );
+}
+
+export function resolveTurnActionId(turn: Pick<ChatTurn, 'id' | 'turnId'>): string {
+  return turn.turnId || turn.id;
 }
 
 export function t(key: string, fallback = key): string {
@@ -302,7 +426,25 @@ export async function bootstrap(): Promise<void> {
   }
 }
 
-export async function invoke<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+const DEFAULT_INVOKE_TIMEOUT_MS = 20_000;
+
+// Methods that resolve only after the host finishes a long-running operation
+// (e.g. a full generation turn). They must not be aborted by the default timeout,
+// otherwise the UI would treat an in-flight turn as failed.
+const UNBOUNDED_METHODS = new Set([
+  'session.select',
+  'turn.send',
+  'turn.regenerate',
+  'turn.edit',
+  'turn.restore',
+  'turn.fork',
+]);
+
+export async function invoke<T>(
+  method: string,
+  params: Record<string, unknown> = {},
+  options: { timeoutMs?: number } = {},
+): Promise<T> {
   if (standaloneDemo) {
     return demoInvoke(method, params) as Promise<T>;
   }
@@ -310,12 +452,15 @@ export async function invoke<T>(method: string, params: Record<string, unknown> 
     throw new Error('Aily Chat host protocol is unavailable');
   }
 
+  const timeoutMs = options.timeoutMs ?? (UNBOUNDED_METHODS.has(method) ? 0 : DEFAULT_INVOKE_TIMEOUT_MS);
   const id = `chat-${Date.now().toString(36)}-${++requestSequence}`;
   const response = new Promise<T>((resolve, reject) => {
-    const timeout = window.setTimeout(() => {
-      pending.delete(id);
-      reject(new Error(`Host protocol timeout: ${method}`));
-    }, 20_000);
+    const timeout = timeoutMs > 0
+      ? window.setTimeout(() => {
+          pending.delete(id);
+          reject(new Error(`Host protocol timeout: ${method}`));
+        }, timeoutMs)
+      : 0;
     pending.set(id, { resolve, reject, timeout });
   });
 
@@ -363,7 +508,7 @@ async function connectHost(): Promise<void> {
         return { ok: true };
       },
       focusTool: () => {
-        document.querySelector<HTMLTextAreaElement>('[data-chat-composer]')?.focus();
+        document.querySelector<HTMLTextAreaElement>('.aily-chat-composer-input')?.focus();
         return { ok: true };
       },
       beforeClose: () => ({
@@ -437,8 +582,10 @@ function flushEvents(): void {
 
 function reduceEvent(current: ChatState, event: ProtocolEvent): ChatState {
   switch (event.type) {
-    case 'snapshot':
-      return { ...current, ...(event.payload as ChatBootstrap) };
+    case 'snapshot': {
+      const payload = event.payload as ChatBootstrap;
+      return { ...current, ...payload };
+    }
     case 'sessions.changed':
       return { ...current, sessions: event.payload as ChatSession[] };
     case 'session.changed': {
@@ -452,7 +599,7 @@ function reduceEvent(current: ChatState, event: ProtocolEvent): ChatState {
       const turns = index < 0
         ? [...current.turns, turn]
         : current.turns.map(item => item.id === turn.id ? turn : item);
-      return { ...current, turns };
+      return { ...current, turns, runState: turn.doing ? 'running' : current.runState };
     }
     case 'turn.removed':
       return { ...current, turns: current.turns.filter(turn => turn.id !== event.payload) };
@@ -536,6 +683,9 @@ async function demoInvoke(method: string, params: Record<string, unknown>): Prom
     patch({ sessions: [session, ...state.sessions], activeSessionId: session.id, turns: [] });
     return { session };
   }
+  if (method === 'session.action') {
+    return demoSessionAction(params);
+  }
   if (method === 'turn.send') {
     const text = String(params['text'] || '').trim();
     const userTurn: ChatTurn = {
@@ -569,6 +719,26 @@ async function demoInvoke(method: string, params: Record<string, unknown>): Prom
     });
     return { ok: true };
   }
+  if (method === 'menu.select') {
+    const kind = String(params['kind'] || '');
+    const path = Array.isArray(params['path']) ? params['path'].map(Number) : [];
+    const option = findDemoMenuOption(
+      kind === 'mode' ? state.modeOptions || [] : state.modelOptions || [],
+      path,
+    );
+    if (kind === 'mode' && option?.id === 'configure-custom-agents') {
+      patch({ showSettings: true });
+    } else if (kind === 'mode' && option) {
+      const builtinMode = ['agent', 'plan', 'ask', 'edit'].includes(option.id);
+      patch({
+        modeId: builtinMode ? option.id : 'agent',
+        modeLabel: builtinMode ? '' : option.label,
+      });
+    } else if (kind === 'model' && option) {
+      patch({ activeModelId: option.id });
+    }
+    return { ok: true };
+  }
   if (method === 'settings.save') {
     patch({ settings: params as unknown as ChatSettings });
     return { ok: true };
@@ -598,6 +768,44 @@ async function demoInvoke(method: string, params: Record<string, unknown>): Prom
   return { ok: true };
 }
 
+function demoSessionAction(params: Record<string, unknown>): { ok: boolean } {
+  const sessionId = String(params['sessionId'] || '');
+  const action = String(params['action'] || '');
+  const sessions = state.sessions.map(session => {
+    if (session.id !== sessionId) return session;
+    switch (action) {
+      case 'pin-session':
+        return { ...session, pinned: true };
+      case 'unpin-session':
+        return { ...session, pinned: false };
+      case 'mark-session-read':
+        return { ...session, unread: false, read: true };
+      case 'mark-session-unread':
+        return { ...session, unread: true, read: false };
+      case 'archive-session':
+        return { ...session, archived: true, pinned: false };
+      case 'unarchive-session':
+        return { ...session, archived: false };
+      case 'rename-session': {
+        const title = String(params['title'] || '').trim();
+        return title ? { ...session, title, updatedAt: Date.now() } : session;
+      }
+      default:
+        return session;
+    }
+  }).filter(session => !(action === 'delete-session' && session.id === sessionId));
+
+  const activeSessionId = action === 'delete-session' && state.activeSessionId === sessionId
+    ? sessions[0]?.id ?? null
+    : state.activeSessionId;
+  const title = action === 'rename-session' && state.activeSessionId === sessionId
+    ? String(params['title'] || state.title)
+    : state.title;
+
+  patch({ sessions, activeSessionId, title });
+  return { ok: true };
+}
+
 function demoBootstrap(): ChatBootstrap {
   return {
     sessions: [
@@ -616,6 +824,8 @@ function demoBootstrap(): ChatBootstrap {
     paneSurface: 'chat',
     sessionListMode: 'sidebar',
     sessionSidebarWidth: 280,
+  sessionSidebarResizeMinWidth: 240,
+  sessionSidebarMaxWidth: 420,
     title: t('DEMO_SESSION', 'React subapp architecture'),
     inputValue: '',
     resources: [],
@@ -628,13 +838,27 @@ function demoBootstrap(): ChatBootstrap {
     modeId: 'agent',
     modeLabel: '代理',
     modeOptions: [
-      { id: 'agent', label: '代理', active: true },
-      { id: 'ask', label: '问答' },
-      { id: 'plan', label: '计划' },
+      { id: 'agent', label: '代理模式', active: true, iconClass: 'fa-light fa-user-astronaut', path: [0] },
+      { id: 'plan', label: '计划', iconClass: 'fa-light fa-list-check', path: [1] },
+      { id: 'ask', label: '问答模式', iconClass: 'fa-light fa-comment-smile', path: [2] },
+      { id: 'custom-agent', label: 'Review Agent', iconClass: 'fa-light fa-user-astronaut', separatorBefore: true, path: [4] },
+      { id: 'configure-custom-agents', label: 'Configure Custom Agents...', iconClass: 'fa-light fa-gear', separatorBefore: true, path: [6] },
     ],
     modelOptions: [
-      { id: 'gpt-5.1-codex', label: 'GPT-5.1 Codex', active: true },
-      { id: 'gpt-5.1-mini', label: 'GPT-5.1 Mini' },
+      {
+        id: 'gpt-5.1-codex',
+        label: 'GPT-5.1 Codex',
+        active: true,
+        path: [0],
+        children: [
+          { id: 'gpt-5.1-codex-low', label: 'Low', detail: '较快响应，较少推理', path: [0, 0] },
+          { id: 'gpt-5.1-codex-medium', label: 'Medium', detail: '平衡速度与推理', active: true, path: [0, 1] },
+          { id: 'gpt-5.1-codex-high', label: 'High', detail: '更深入推理', path: [0, 2] },
+        ],
+      },
+      { id: 'gpt-5.1-mini', label: 'GPT-5.1 Mini', separatorBefore: true, path: [2] },
+      { id: 'other-models', label: '其他模型', type: 'section', separatorBefore: true, path: [4] },
+      { id: 'custom-model', label: 'Custom Model', path: [5] },
     ],
     permissionLabel: '默认权限',
     contextUsage: { percentage: 18, label: '18%', estimated: true },
@@ -644,6 +868,19 @@ function demoBootstrap(): ChatBootstrap {
     showSettings: false,
     settings: demoSettings(),
   };
+}
+
+function findDemoMenuOption(options: ChatMenuOption[], path: number[]): ChatMenuOption | undefined {
+  for (const option of options) {
+    if (option.path?.length === path.length && option.path.every((value, index) => value === path[index])) {
+      return option;
+    }
+    const child = option.children ? findDemoMenuOption(option.children, path) : undefined;
+    if (child) {
+      return child;
+    }
+  }
+  return undefined;
 }
 
 function demoSettings(): ChatSettings {
@@ -702,8 +939,18 @@ function demoTurns(): ChatTurn[] {
       role: 'assistant',
       createdAt: Date.now() - 30_000,
       parts: [
-        { id: 'thinking', type: 'thinking', title: t('ANALYZED', 'Analyzed workspace'), detail: t('DEMO_ANALYSIS_DETAIL', 'Separated rendering, host state, and tool execution.'), state: 'done' },
-        { id: 'tool', type: 'tool', title: t('READ_FILES', 'Read project files'), detail: '42 files · 11 modules', state: 'done' },
+        { id: 'thinking', type: 'thinking', content: t('DEMO_ANALYSIS_DETAIL', 'Separated rendering, host state, and tool execution.'), isComplete: true, state: 'done' },
+        {
+          id: 'tool',
+          type: 'tool_call',
+          toolName: 'read_file',
+          toolDisplayName: 'ReadFile',
+          displayTitle: t('READ_FILES', 'Read project files'),
+          displaySubtitle: 'src/app/tools/aily-chat/aily-chat.component.ts · L1-L240',
+          displayMeta: '1.2s',
+          state: 'done',
+          args: { filePath: 'src/app/tools/aily-chat/aily-chat.component.ts', startLine: 1, endLine: 240 },
+        },
         { id: 'answer', type: 'markdown', content: t('DEMO_ANSWER', 'The React child owns presentation and interaction state. Session lifecycle, model routing, project access, and tool execution remain in the Blockly host and are exposed through a versioned request/event protocol.') },
       ],
     },

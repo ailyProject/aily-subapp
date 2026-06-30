@@ -64,33 +64,6 @@ function penpalVendorPath() {
   return path.join(__dirname, 'node_modules', 'penpal', 'dist', 'penpal.min.js');
 }
 
-function fontPathFromRequest(requestPath) {
-  if (!requestPath.startsWith('/fonts/')) return '';
-
-  const decoded = decodeURIComponent(requestPath.replace(/^\/fonts\//, ''));
-  if (decoded.includes('\0')) return '';
-
-  const candidates = [
-    path.join(__dirname, 'dist', TOOL_ID, 'ui', 'fonts'),
-    path.join(__dirname, 'ui', 'public', 'fonts'),
-    path.join(__dirname, 'ui', 'fonts'),
-    path.resolve(__dirname, '..', '..', '..', 'OutSource', 'aily--blockly', 'public', 'fonts'),
-    path.resolve(__dirname, '..', '..', 'aily--blockly', 'public', 'fonts'),
-    path.resolve(__dirname, '..', '..', 'OutSource', 'aily--blockly', 'public', 'fonts'),
-    process.resourcesPath ? path.join(process.resourcesPath, 'renderer', 'fonts') : ''
-  ].filter(Boolean);
-
-  for (const root of candidates) {
-    const resolvedRoot = path.resolve(root);
-    const resolvedFile = path.resolve(path.join(resolvedRoot, decoded));
-    const relative = path.relative(resolvedRoot, resolvedFile);
-    if (relative.startsWith('..') || path.isAbsolute(relative)) continue;
-    if (fs.existsSync(resolvedFile)) return resolvedFile;
-  }
-
-  return '';
-}
-
 function defaultUiRoot() {
   const candidates = [
     path.join(__dirname, 'dist', TOOL_ID, 'ui'),
@@ -104,12 +77,6 @@ function serveStatic(uiRoot, request, response) {
   const requestUrl = new URL(request.url || '/', 'http://127.0.0.1');
   if (requestUrl.pathname === '/vendor/penpal.min.js') {
     serveFile(penpalVendorPath(), response);
-    return;
-  }
-
-  const fontPath = fontPathFromRequest(requestUrl.pathname);
-  if (fontPath) {
-    serveFile(fontPath, response);
     return;
   }
 

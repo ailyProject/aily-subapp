@@ -1,0 +1,98 @@
+.edit-context-toolbar {
+  display: contents;
+}
+
+.edit-context-toolbar .acc-clip,
+.edit-context-toolbar .acc-back,
+.edit-context-toolbar .acc-sub,
+.edit-context-toolbar .acc-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+}
+
+.edit-context-toolbar .acc-clip {
+  width: 28px;
+  height: 28px;
+  font-size: 14px;
+  color: var(--aily-chat-xdialog-edit-btn-fg, #eee);
+  padding-top: 1px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.edit-context-toolbar .acc-clip:hover,
+.edit-context-toolbar .acc-back:hover,
+.edit-context-toolbar .acc-sub:hover,
+.edit-context-toolbar .acc-chip:hover {
+  color: var(--aily-chat-xdialog-edit-resource-name, #fff);
+  background: var(--aily-chat-xdialog-edit-btn-hover-bg, #3f3f3f);
+}
+
+.edit-context-toolbar .acc-expand-backdrop {
+  border-radius: 5px;
+  border: 1px solid var(--aily-chat-xdialog-edit-list-border, #ccc);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 84px;
+  height: 28px;
+  z-index: 0;
+  pointer-events: none;
+  background: var(--aily-chat-xdialog-edit-list-bg, #3f3f3f);
+}
+
+.edit-context-toolbar .acc-back,
+.edit-context-toolbar .acc-sub {
+  width: 28px;
+  height: 28px;
+  font-size: 14px;
+  color: var(--aily-chat-xdialog-edit-btn2-fg, #ccc);
+  padding-top: 1px;
+  border-radius: 5px;
+  z-index: 1;
+  cursor: pointer;
+}
+
+.edit-context-toolbar .acc-chip {
+  width: auto;
+  height: 28px;
+  padding: 0 6px;
+  gap: 4px;
+  font-size: 14px;
+  color: var(--aily-chat-xdialog-edit-btn-fg, #eee);
+  padding-top: 1px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.edit-context-toolbar .acc-chip span {
+  margin-left: 5px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+@container aily-chat-edit-toolbar (max-width: 300px) {
+  .edit-context-toolbar .acc-chip {
+    width: 28px !important;
+    padding: 1px 0 0 !important;
+    gap: 0;
+  }
+
+  .edit-context-toolbar .acc-chip span {
+    display: none;
+  }
+}
+
+.edit-context-toolbar .acc-chip.acc-chip--after-expanded-context {
+  width: 28px !important;
+  padding: 1px 0 0 !important;
+  gap: 0;
+}
+
+.edit-context-toolbar .acc-chip.acc-chip--after-expanded-context span {
+  display: none;
+}

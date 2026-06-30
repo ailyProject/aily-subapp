@@ -10,8 +10,8 @@
   "scripts": {
     "start": "node index.js rpc",
     "serve": "node index.js serve",
-    "build:icons": "node scripts/build-fa-subset.mjs",
-    "build:ui": "node scripts/build-fa-subset.mjs && node scripts/build-ui.mjs",
+    "build:icons": "node scripts/build-icons-css.mjs",
+    "build:ui": "node scripts/build-icons-css.mjs && node scripts/build-ui.mjs",
     "install:ui": "npm install --prefix ui",
     "cli": "node index.js",
     "status": "node index.js status",

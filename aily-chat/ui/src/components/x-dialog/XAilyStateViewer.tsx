@@ -1,5 +1,5 @@
 import { ChatPart } from '../../protocol';
-import './x-aily-activity-viewers.css';
+import './x-aily-activity-viewers.scss';
 
 export function XAilyStateViewer({ part }: { part: ChatPart }) {
   return (

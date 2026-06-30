@@ -16,6 +16,7 @@
 .ac-think-body {
   position: relative; max-height: 200px; padding: 4px 2px 6px 20px; margin-top: 2px;
   overflow-x: hidden; overflow-y: auto; scrollbar-width: thin;
+  overflow-anchor: none;
   scrollbar-color: var(--chat-border, rgba(255,255,255,.10)) transparent;
   scrollbar-gutter: stable; user-select: text;
 }

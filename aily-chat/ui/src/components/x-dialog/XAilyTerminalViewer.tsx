@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { ChatPart } from '../../protocol';
 import { useStreamingText } from './useStreamingText';
-import './x-aily-activity-viewers.css';
+import './x-aily-activity-viewers.scss';
 
 export function XAilyTerminalViewer({ part }: { part: ChatPart }) {
   const bodyRef = useRef<HTMLPreElement>(null);

@@ -2,7 +2,7 @@
 .x-aily-state-viewer,
 .x-aily-terminal-viewer { min-width: 0; color: var(--chat-fg-dim, #8e8e8e); font-size: 12px; }
 .x-aily-activity-section {
-  margin: 0 0 6px; overflow: hidden; border: 1px solid var(--chat-border, rgba(255,255,255,.1));
+  overflow: hidden; border: 1px solid var(--chat-border, rgba(255,255,255,.1));
   border-radius: 5px; background: rgba(255,255,255,.025);
 }
 .x-aily-activity-section-title { padding: 5px 8px; border-bottom: 1px solid var(--chat-border, rgba(255,255,255,.1)); font-weight: 500; }
@@ -10,6 +10,11 @@
 .x-aily-state-viewer pre {
   max-height: 180px; padding: 8px; margin: 0; overflow: auto; color: var(--chat-fg-dim);
   font: 12px/1.45 Consolas, Monaco, "Courier New", monospace; white-space: pre-wrap;
+}
+.x-aily-activity-section .x-aily-tool-output-plain {
+  max-height: min(360px, 48vh); contain: content; content-visibility: auto;
+  contain-intrinsic-size: 360px; overflow: auto; word-break: normal; overflow-wrap: normal;
+  white-space: pre;
 }
 .x-aily-activity-note { padding: 3px 1px; opacity: .8; }
 .x-aily-state-copy { padding: 3px 0; white-space: pre-wrap; overflow-wrap: anywhere; }

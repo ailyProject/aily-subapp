@@ -1,0 +1,171 @@
+.dialog-box {
+  position: relative; min-width: 0; max-width: 100%; margin: 0;
+  border-radius: 5px; content-visibility: auto; contain-intrinsic-size: 120px;
+}
+.dialog-box.aily {
+  width: 100%;
+  align-self: stretch;
+}
+.aily-x-bubble {
+  width: 100%;
+  max-width: 100%;
+}
+.aily-x-bubble .ant-bubble-body,
+.aily-x-bubble .ant-bubble-content {
+  min-width: 0;
+  max-width: 100%;
+}
+.dialog-box.aily .aily-x-bubble {
+  width: 100%;
+  max-width: 100%;
+  align-self: stretch;
+}
+.dialog-box.aily .aily-x-bubble .ant-bubble-body {
+  width: 100%;
+  max-width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.dialog-box.aily .aily-x-bubble .ant-bubble-content {
+  width: 100%;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+}
+.dialog-box.user .aily-x-bubble {
+  width: fit-content;
+  max-width: 88%;
+}
+.dialog-box.user .aily-x-bubble .ant-bubble-content {
+  padding: 0;
+  color: inherit;
+  background: transparent;
+}
+.dialog-box.user { display: flex; flex-direction: column; align-items: flex-end; }
+.dialog-box .content {
+  min-width: 0; max-width: 100%; padding: 5px 0; overflow-wrap: anywhere; user-select: text;
+}
+.dialog-box.user .content {
+  width: fit-content; max-width: 100%; align-self: flex-end; padding: 5px 10px;
+  margin-bottom: 5px; border-radius: 5px; background: var(--chat-bg-request);
+}
+.dialog-box.user .content:hover { background: var(--chat-bg-request-hover); }
+.dialog-box.user.editable .content { cursor: pointer; }
+.dialog-box.user.editable:hover .content { background: var(--chat-bg-request-hover); }
+.dialog-box.user.is-editing .edit-input-box {
+  align-self: stretch;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  margin: 5px 0;
+  padding: 5px;
+  border-radius: 5px;
+  border: 1px solid var(--aily-border-secondary);
+  background: color-mix(in srgb, var(--aily-bg-elevated) 82%, transparent);
+}
+.dialog-box.user.is-editing .edit-textarea-wrapper {
+  display: flex;
+  flex-direction: column;
+  min-height: 98px;
+}
+.dialog-box.user.is-editing .edit-textarea-wrapper textarea {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 98px;
+  padding: 7px 0 0 5px;
+  border: 0;
+  outline: 0;
+  resize: none;
+  color: inherit;
+  font: inherit;
+  background: transparent;
+}
+.dialog-box.user.is-editing .edit-btns {
+  width: 100%;
+  display: flex;
+  height: 28px;
+  position: relative;
+  align-items: center;
+  margin-top: 4px;
+  container-type: inline-size;
+  container-name: aily-chat-edit-toolbar;
+}
+.dialog-box.user.is-editing .edit-btn {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 5px;
+  font-size: 14px;
+  color: var(--aily-chat-xdialog-edit-btn-fg, #eee);
+  background: transparent;
+  cursor: pointer;
+}
+.dialog-box.user.is-editing .edit-btn:hover {
+  color: var(--aily-chat-xdialog-edit-resource-name, #fff);
+  background: var(--aily-chat-xdialog-edit-btn-hover-bg, #3f3f3f);
+}
+.dialog-box.user.is-editing .edit-cancel-btn {
+  position: absolute;
+  right: 32px;
+  color: var(--aily-chat-xdialog-msg-btn, #888);
+}
+.dialog-box.user.is-editing .edit-cancel-btn:hover {
+  color: var(--aily-chat-xdialog-edit-cancel-hover-fg, #e06c75);
+  background: var(--aily-chat-xdialog-edit-cancel-hover-bg, rgba(224, 108, 117, 0.1));
+}
+.dialog-box.user.is-editing .edit-send-btn {
+  position: absolute;
+  right: 0;
+}
+.user-turn-actions {
+  display: flex; min-height: 22px; align-self: center; gap: 2px; margin-bottom: 2px;
+  opacity: 0; pointer-events: none;
+}
+.dialog-box.user:hover .user-turn-actions { opacity: 1; pointer-events: auto; }
+.user-turn-actions button,
+.msg-actions button {
+  height: 22px; padding: 0 7px; border: 1px solid transparent; border-radius: 5px;
+  color: var(--chat-fg-dim); background: transparent; font-size: 10px; cursor: pointer;
+}
+.user-turn-actions button:hover,
+.msg-actions button:hover,
+.msg-actions button[data-active="true"] {
+  color: var(--chat-fg); background: var(--aily-highlight-bg); border-color: var(--aily-border-secondary);
+}
+.msg-actions button:disabled {
+  cursor: default; opacity: 0.45; pointer-events: none;
+}
+.msg-footer {
+  display: flex; width: 100%; min-height: 22px; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 0 2px;
+}
+.dialog-box.user .msg-footer { justify-content: flex-end; }
+.aily-x-bubble .ant-bubble-footer {
+  margin-top: 10px;
+}
+.msg-actions { display: flex; align-items: center; gap: 1px; }
+.dialog-box.aily.has-hover-footer .msg-footer {
+  opacity: 0.38; transition: opacity 0.14s ease;
+}
+.dialog-box.aily.has-hover-footer:hover .msg-footer,
+.dialog-box.aily.has-hover-footer:focus-within .msg-footer { opacity: 1; }
+.msg-model-label { color: var(--aily-text-disabled); font-size: 10px; }
+.loader {
+  position: static;
+  width: 100%;
+  height: 2px;
+  margin: 10px 0 2px;
+  --c: no-repeat linear-gradient(color-mix(in srgb, var(--aily-color-accent, #61afef) 50%, transparent) 0 0);
+  background: var(--c), var(--c), var(--aily-chat-viewer-overlay-hover, rgba(255, 255, 255, 0.06));
+  background-size: 60% 100%;
+  animation: l16 3s infinite;
+}
+
+@keyframes l16 {
+  0% { background-position: -150% 0, -150% 0; }
+  66% { background-position: 250% 0, -150% 0; }
+  100% { background-position: 250% 0, 250% 0; }
+}

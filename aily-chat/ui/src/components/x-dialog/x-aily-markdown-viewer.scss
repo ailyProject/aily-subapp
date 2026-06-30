@@ -1,0 +1,132 @@
+.x-aily-markdown-viewer {
+  --font-size: inherit;
+  --margin-block: 0 0 8px;
+  --margin-ul-ol: 0 0 8px 1.5em;
+  --margin-li: 2px 0;
+  --table-margin: 8px 0;
+  --td-th-padding: 6px 8px;
+  color: var(--aily-text-tertiary);
+  line-height: 1.62;
+  overflow-anchor: none;
+}
+
+.x-aily-markdown-viewer-streaming,
+.x-aily-markdown-viewer-streaming * {
+  animation-duration: 0s !important;
+  transition-duration: 0s !important;
+}
+
+.x-aily-markdown-viewer > :first-child {
+  margin-top: 0;
+}
+
+.x-aily-markdown-viewer > :last-child {
+  margin-bottom: 0;
+}
+
+.x-aily-markdown-viewer h1,
+.x-aily-markdown-viewer h2,
+.x-aily-markdown-viewer h3,
+.x-aily-markdown-viewer h4,
+.x-aily-markdown-viewer h5,
+.x-aily-markdown-viewer h6 {
+  margin: 12px 0 6px;
+  color: var(--aily-text-primary);
+  line-height: 1.35;
+}
+
+.x-aily-markdown-viewer h1 { font-size: 1.55em; }
+.x-aily-markdown-viewer h2 { font-size: 1.35em; }
+.x-aily-markdown-viewer h3 { font-size: 1.18em; }
+.x-aily-markdown-viewer h4,
+.x-aily-markdown-viewer h5,
+.x-aily-markdown-viewer h6 { font-size: 1em; }
+
+.x-aily-markdown-viewer a {
+  color: var(--aily-color-accent);
+  text-decoration: none;
+}
+
+.x-aily-markdown-viewer a:hover {
+  text-decoration: underline;
+}
+
+.x-aily-markdown-viewer blockquote {
+  margin: 8px 0;
+  padding: 4px 10px;
+  border-left: 3px solid var(--aily-border-primary);
+  color: var(--aily-text-secondary);
+  background: var(--aily-bg-secondary);
+}
+
+.x-aily-markdown-viewer pre {
+  position: relative;
+  margin: .5em 0;
+  padding: 12px;
+  overflow-x: auto;
+  border: 1px solid var(--aily-chat-viewer-code-border, #444);
+  border-radius: 5px;
+  background: var(--aily-chat-viewer-code-bg, #0d1117);
+  scrollbar-width: thin;
+  scrollbar-color: var(--aily-chat-viewer-scrollbar, rgba(255,255,255,.2)) transparent;
+}
+
+.x-aily-markdown-viewer pre code.x-aily-markdown-code {
+  display: block;
+  padding: 0;
+  color: var(--aily-chat-viewer-code-fg, #abb2bf);
+  background: transparent;
+  font: 12px/1.4 Consolas, Monaco, "Courier New", monospace;
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+.x-aily-markdown-viewer pre code.x-aily-markdown-code[data-lang]::before {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  color: var(--chat-fg-muted, #6a6a6a);
+  font: 10px/1.4 var(--aily-font-family, sans-serif);
+  content: attr(data-lang);
+  pointer-events: none;
+}
+
+.x-aily-markdown-viewer pre code.x-aily-markdown-code[data-streaming="true"]::after {
+  display: inline-block;
+  width: 5px;
+  height: 13px;
+  margin-left: 2px;
+  vertical-align: -2px;
+  content: "";
+  background: var(--chat-info, #75beff);
+  animation: x-aily-markdown-code-caret 1s steps(1) infinite;
+}
+
+.x-aily-markdown-viewer code.x-aily-inline-code {
+  padding: 0;
+  border-radius: 5px;
+  color: var(--aily-chat-viewer-inline-code, #ffbd08);
+  background: transparent;
+  font: 12px Consolas, Monaco, "Courier New", monospace;
+}
+
+.x-aily-markdown-viewer table {
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.x-aily-markdown-viewer th,
+.x-aily-markdown-viewer td {
+  border: 1px solid var(--aily-border-secondary);
+}
+
+.x-aily-markdown-viewer hr {
+  border: 0;
+  border-top: 1px solid var(--aily-border-secondary);
+}
+
+@keyframes x-aily-markdown-code-caret {
+  50% { opacity: 0; }
+}

@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { useStreamingText } from './useStreamingText';
-import './x-aily-code-viewer.css';
+import './x-aily-code-viewer.scss';
 
 export const XAilyCodeViewer = memo(function XAilyCodeViewer({
   children,

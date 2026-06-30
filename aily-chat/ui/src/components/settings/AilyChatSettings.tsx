@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChatSettings, invoke, t } from '../../protocol';
 import { FaIcon } from '../shared/Icon';
-import './aily-chat-settings.css';
+import './aily-chat-settings.scss';
 
 export function AilyChatSettings({
   value,
@@ -67,7 +67,7 @@ export function AilyChatSettings({
             <button className="settings-add-button" onClick={() => {
               patch({ customModels: [{ model: '', name: '', enabled: true, isCustom: true, baseUrl: '' }, ...settings.customModels] });
               setEditingModel(0);
-            }}>＋ 添加自定义模型</button>
+            }}><FaIcon icon="plus" /> 添加自定义模型</button>
             <div className="settings-list">
               {settings.customModels.map((model, index) => editingModel === index ? (
                 <div className="model-editor" key={`${model.model}-${index}`}>
@@ -83,7 +83,7 @@ export function AilyChatSettings({
               ) : (
                 <div className="settings-list-row" key={`${model.model}-${index}`}>
                   <label className="settings-check"><input type="checkbox" checked={model.enabled} onChange={event => updateModel(index, { enabled: event.target.checked })} /><span><strong>{model.name}</strong><small>{model.model}</small></span></label>
-                  <button onClick={() => setEditingModel(index)}>编辑</button>
+                  <button onClick={() => setEditingModel(index)}><FaIcon icon="pen" /></button>
                 </div>
               ))}
             </div>

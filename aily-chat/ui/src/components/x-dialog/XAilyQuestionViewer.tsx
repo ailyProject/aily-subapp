@@ -1,6 +1,6 @@
 import { ChatPart, invoke, t } from '../../protocol';
 import { FaIcon } from '../shared/Icon';
-import './x-aily-card-viewers.css';
+import './x-aily-card-viewers.scss';
 
 export function XAilyQuestionViewer({ part }: { part: ChatPart }) {
   return (

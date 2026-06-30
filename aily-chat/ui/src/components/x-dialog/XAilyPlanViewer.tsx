@@ -1,7 +1,7 @@
 import { ChatPart, invoke } from '../../protocol';
 import { FaIcon } from '../shared/Icon';
 import { XAilyMarkdownViewer } from './XAilyMarkdownViewer';
-import './x-aily-card-viewers.css';
+import './x-aily-card-viewers.scss';
 
 export function XAilyPlanViewer({ part }: { part: ChatPart }) {
   return (
