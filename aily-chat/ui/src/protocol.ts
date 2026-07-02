@@ -1,4 +1,7 @@
 import { useSyncExternalStore } from 'react';
+import enMessages from '../../i18n/en.json';
+import zhCnMessages from '../../i18n/zh_cn.json';
+import zhHkMessages from '../../i18n/zh_hk.json';
 
 export type ThemeName = 'dark' | 'light';
 export type RunState = 'idle' | 'running' | 'waiting' | 'error';
@@ -286,8 +289,9 @@ export interface ChatBootstrap {
 }
 
 export interface ProtocolEvent {
-  type: 'snapshot' | 'sessions.changed' | 'session.changed' | 'turn.upsert' | 'turn.removed' | 'run.state';
+  type: 'snapshot' | 'sessions.changed' | 'session.changed' | 'turn.upsert' | 'turn.removed' | 'run.state' | 'heartbeat';
   sessionId?: string;
+  webStreamId?: number;
   payload: unknown;
 }
 
@@ -310,6 +314,11 @@ interface PendingRequest {
   timeout: number;
 }
 
+interface ActiveTurnStream {
+  controller: AbortController;
+  streamId: number;
+}
+
 export interface ChatState extends ChatBootstrap {
   context: HostContext;
   connected: boolean;
@@ -327,9 +336,12 @@ declare global {
 const PROTOCOL_VERSION = 1;
 const listeners = new Set<() => void>();
 const pending = new Map<string, PendingRequest>();
+const activeTurnStreams = new Map<string, ActiveTurnStream>();
+const canceledTurnStreams = new Set<number>();
 const eventQueue: ProtocolEvent[] = [];
 let flushFrame = 0;
 let requestSequence = 0;
+let streamSequence = 0;
 let host: HostRemote | null = null;
 let standaloneDemo = false;
 let state: ChatState = {
@@ -373,6 +385,15 @@ let state: ChatState = {
   pendingPlanReview: null,
 };
 
+const DEFAULT_WEB_API_BASE = 'http://127.0.0.1:3030';
+
+function webApiBase(): string {
+  const query = new URLSearchParams(location.search);
+  const fromQuery = query.get('apiBase') || query.get('codexLearnApi');
+  const fromEnv = import.meta.env.VITE_CODEX_LEARN_API as string | undefined;
+  return String(fromQuery || fromEnv || DEFAULT_WEB_API_BASE).replace(/\/+$/, '');
+}
+
 export function useChatState(): ChatState {
   return useSyncExternalStore(
     callback => {
@@ -393,36 +414,25 @@ export function t(key: string, fallback = key): string {
 
 export async function bootstrap(): Promise<void> {
   const query = new URLSearchParams(location.search);
-  patch({
-    context: {
-      ...state.context,
-      lang: normalizeLang(query.get('lang') || navigator.language),
-    },
-  });
-
-  await connectHost();
+  const context: HostContext = {
+    ...state.context,
+    lang: normalizeLang(query.get('lang') || navigator.language),
+    theme: normalizeTheme(query.get('theme') || state.context.theme),
+    platform: 'web',
+  };
+  patch({ context, connected: true });
   applyTheme(state.context.theme);
   await loadTranslations(state.context.lang);
 
-  host?.childReady?.({
-    backendStatus: standaloneDemo ? 'standalone-demo' : 'host-connected',
-    adapterState: 'connecting',
-  });
-
   try {
-    const initial = await invoke<ChatBootstrap>('bootstrap');
+    const initial = await invoke<ChatBootstrap>('bootstrap', {
+      sessionId: query.get('sessionId') || localStorage.getItem('codex-learn.web.active-session') || '',
+      workspace: query.get('workspace') || '',
+    });
     patch({ ...initial, loading: false, protocolError: '' });
   } catch (error) {
     const message = errorMessage(error);
     patch({ loading: false, protocolError: message });
-    host?.reportHostMessage?.({
-      state: 'warning',
-      title: 'Aily Chat',
-      message,
-      detail: 'Aily Chat host protocol bootstrap failed',
-      showMessage: false,
-      sendToLog: true,
-    });
   }
 }
 
@@ -445,32 +455,268 @@ export async function invoke<T>(
   params: Record<string, unknown> = {},
   options: { timeoutMs?: number } = {},
 ): Promise<T> {
-  if (standaloneDemo) {
-    return demoInvoke(method, params) as Promise<T>;
+  void options;
+  if (method === 'turn.send') {
+    return streamTurnSend(params) as Promise<T>;
   }
-  if (!host?.sendToolSignal) {
-    throw new Error('Aily Chat host protocol is unavailable');
+  if (method === 'bootstrap') {
+    const query = new URLSearchParams();
+    const sessionId = String(params['sessionId'] || '');
+    const workspace = String(params['workspace'] || '');
+    if (sessionId) query.set('sessionId', sessionId);
+    if (workspace) query.set('workspace', workspace);
+    return apiFetch<ChatBootstrap>(`/api/bootstrap${query.size ? `?${query}` : ''}`) as Promise<T>;
   }
 
-  const timeoutMs = options.timeoutMs ?? (UNBOUNDED_METHODS.has(method) ? 0 : DEFAULT_INVOKE_TIMEOUT_MS);
-  const id = `chat-${Date.now().toString(36)}-${++requestSequence}`;
-  const response = new Promise<T>((resolve, reject) => {
-    const timeout = timeoutMs > 0
-      ? window.setTimeout(() => {
-          pending.delete(id);
-          reject(new Error(`Host protocol timeout: ${method}`));
-        }, timeoutMs)
-      : 0;
-    pending.set(id, { resolve, reject, timeout });
+  const response = await apiFetch<{ ok: boolean; result: unknown }>('/api/invoke', {
+    method: 'POST',
+    body: JSON.stringify({ method, params }),
   });
+  applyInvokeResult(method, response.result);
+  return response.result as T;
+}
 
-  await host.sendToolSignal('aily-chat:request', {
-    protocolVersion: PROTOCOL_VERSION,
-    id,
-    method,
-    params,
+export async function stopTurn(sessionId = state.activeSessionId || ''): Promise<void> {
+  const id = String(sessionId || state.activeSessionId || '');
+  if (id) {
+    const active = activeTurnStreams.get(id);
+    if (active) {
+      canceledTurnStreams.add(active.streamId);
+      active.controller.abort();
+    }
+    activeTurnStreams.delete(id);
+  }
+  patch({
+    runState: 'idle',
+    pendingConfirmations: [],
+    activeConfirmationIndex: 0,
   });
-  return response;
+  await invoke('turn.stop', { sessionId: id });
+}
+
+async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const response = await fetch(`${webApiBase()}${path}`, {
+    ...init,
+    headers: {
+      'content-type': 'application/json',
+      ...(init.headers || {}),
+    },
+  });
+  if (!response.ok) {
+    let message = `${response.status} ${response.statusText}`;
+    try {
+      const payload = await response.json() as { error?: string };
+      if (payload.error) message = payload.error;
+    } catch {
+      // Keep the HTTP status fallback.
+    }
+    throw new Error(message);
+  }
+  return response.json() as Promise<T>;
+}
+
+async function streamTurnSend(params: Record<string, unknown>): Promise<{ ok: boolean }> {
+  let sessionId = String(params['sessionId'] || state.activeSessionId || '');
+  if (!sessionId) {
+    const created = await invoke<{ session?: ChatSession }>('session.create');
+    sessionId = created.session?.id || state.activeSessionId || '';
+  }
+
+  const text = String(params['text'] || '').trim();
+  if (!text) return { ok: true };
+
+  const optimisticTurn: ChatTurn = {
+    id: `local_user_${Date.now()}`,
+    role: 'user',
+    createdAt: Date.now(),
+    parts: [{ id: 'text', type: 'markdown', content: text }],
+  };
+  const optimisticTitle = truncateSessionTitle(text);
+  patch({
+    activeSessionId: sessionId,
+    paneSurface: 'chat',
+    runState: 'running',
+    title: optimisticTitle,
+    sessions: state.sessions.map(session => session.id === sessionId
+      ? { ...session, title: optimisticTitle, updatedAt: Date.now() }
+      : session),
+    turns: [...state.turns, optimisticTurn],
+  });
+  localStorage.setItem('codex-learn.web.active-session', sessionId);
+
+  const controller = new AbortController();
+  const streamId = ++streamSequence;
+  activeTurnStreams.set(sessionId, { controller, streamId });
+
+  let response: Response;
+  try {
+    response = await fetch(`${webApiBase()}/api/turn/send`, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        sessionId,
+        text,
+        workspace: new URLSearchParams(location.search).get('workspace') || '',
+      }),
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      return { ok: true };
+    }
+    activeTurnStreams.delete(sessionId);
+    patch({ runState: 'error' });
+    throw error;
+  }
+  if (!response.ok || !response.body) {
+    activeTurnStreams.delete(sessionId);
+    patch({ runState: 'error' });
+    throw new Error(response.ok ? 'Empty stream response' : `${response.status} ${response.statusText}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        consumeStreamLine(line, streamId);
+      }
+    }
+    if (buffer.trim()) consumeStreamLine(buffer, streamId);
+  } catch (error) {
+    if (!controller.signal.aborted) {
+      patch({ runState: 'error' });
+      throw error;
+    }
+  } finally {
+    const active = activeTurnStreams.get(sessionId);
+    if (active?.streamId === streamId) {
+      activeTurnStreams.delete(sessionId);
+    }
+    const wasCanceled = canceledTurnStreams.has(streamId);
+    if (wasCanceled) {
+      canceledTurnStreams.delete(streamId);
+    } else {
+      if (state.runState === 'running') {
+        patch({ runState: 'idle' });
+      }
+      void refreshBootstrap();
+    }
+  }
+  return { ok: true };
+}
+
+function truncateSessionTitle(value: string): string {
+  const text = value.trim().replace(/\s+/g, ' ');
+  return text.length > 48 ? `${text.slice(0, 48)}…` : text;
+}
+
+function consumeStreamLine(line: string, streamId?: number): void {
+  const trimmed = line.trim();
+  if (!trimmed) return;
+  try {
+    const event = JSON.parse(trimmed) as ProtocolEvent;
+    if (streamId) {
+      event.webStreamId = streamId;
+    }
+    if (event.type === 'heartbeat') {
+      return;
+    }
+    enqueueEvent(event);
+  } catch (error) {
+    console.warn('Failed to parse codex-learn stream event', error, trimmed);
+  }
+}
+
+function applyInvokeResult(method: string, result: unknown): void {
+  const payload = asRecord(result);
+  if (method === 'session.select') {
+    const activeSessionId = String(payload['activeSessionId'] || '');
+    if (activeSessionId) {
+      localStorage.setItem('codex-learn.web.active-session', activeSessionId);
+    }
+    patch({
+      activeSessionId,
+      turns: Array.isArray(payload['turns']) ? payload['turns'] as ChatTurn[] : [],
+      paneSurface: 'chat',
+      runState: 'idle',
+    });
+    return;
+  }
+  if (method === 'session.create') {
+    const session = payload['session'] as ChatSession | undefined;
+    if (!session?.id) return;
+    localStorage.setItem('codex-learn.web.active-session', session.id);
+    patch({
+      sessions: mergeSessions([session, ...state.sessions], session.id),
+      activeSessionId: session.id,
+      turns: [],
+      paneSurface: 'chat',
+      title: session.title,
+    });
+    return;
+  }
+  if (method === 'surface.toggleSettings') {
+    patch({ showSettings: Boolean(payload['showSettings']) });
+    return;
+  }
+  if (method === 'turn.stop') {
+    patch({
+      runState: 'idle',
+      pendingConfirmations: [],
+      activeConfirmationIndex: 0,
+    });
+    return;
+  }
+  if (method === 'interaction.respond') {
+    patch({
+      pendingConfirmations: [],
+      activeConfirmationIndex: 0,
+    });
+    return;
+  }
+  if (method === 'session.action') {
+    if (Array.isArray(payload['sessions'])) {
+      const activeSessionId = payload['activeSessionId'] != null
+        ? (String(payload['activeSessionId'] || '') || null)
+        : state.activeSessionId;
+      patch({
+        sessions: payload['sessions'] as ChatSession[],
+        activeSessionId,
+        paneSurface: activeSessionId ? 'chat' : 'entry',
+      });
+      if (activeSessionId) {
+        localStorage.setItem('codex-learn.web.active-session', activeSessionId);
+      } else {
+        localStorage.removeItem('codex-learn.web.active-session');
+      }
+    }
+    void refreshBootstrap();
+  }
+}
+
+async function refreshBootstrap(): Promise<void> {
+  try {
+    const next = await invoke<ChatBootstrap>('bootstrap', {
+      sessionId: state.activeSessionId || '',
+      workspace: new URLSearchParams(location.search).get('workspace') || '',
+    });
+    patch({ ...next, loading: false, protocolError: '' });
+    const activeId = next.activeSessionId || '';
+    if (activeId) {
+      localStorage.setItem('codex-learn.web.active-session', activeId);
+    } else {
+      localStorage.removeItem('codex-learn.web.active-session');
+    }
+  } catch (error) {
+    patch({ protocolError: errorMessage(error) });
+  }
 }
 
 export function saveDraft(text: string): void {
@@ -581,6 +827,9 @@ function flushEvents(): void {
 }
 
 function reduceEvent(current: ChatState, event: ProtocolEvent): ChatState {
+  if (event.webStreamId && canceledTurnStreams.has(event.webStreamId)) {
+    return current;
+  }
   switch (event.type) {
     case 'snapshot': {
       const payload = event.payload as ChatBootstrap;
@@ -589,8 +838,12 @@ function reduceEvent(current: ChatState, event: ProtocolEvent): ChatState {
     case 'sessions.changed':
       return { ...current, sessions: event.payload as ChatSession[] };
     case 'session.changed': {
-      const payload = event.payload as { activeSessionId: string; turns: ChatTurn[] };
-      return { ...current, ...payload };
+      const payload = event.payload as { activeSessionId: string; turns: ChatTurn[]; sessions?: ChatSession[]; title?: string };
+      return {
+        ...current,
+        ...payload,
+        sessions: payload.sessions ? mergeSessions(payload.sessions, payload.activeSessionId) : current.sessions,
+      };
     }
     case 'turn.upsert': {
       if (event.sessionId && event.sessionId !== current.activeSessionId) return current;
@@ -604,10 +857,25 @@ function reduceEvent(current: ChatState, event: ProtocolEvent): ChatState {
     case 'turn.removed':
       return { ...current, turns: current.turns.filter(turn => turn.id !== event.payload) };
     case 'run.state':
+      if (event.webStreamId && canceledTurnStreams.has(event.webStreamId)) return current;
       return { ...current, runState: event.payload as RunState };
     default:
       return current;
   }
+}
+
+function mergeSessions(sessions: ChatSession[], activeSessionId?: string | null): ChatSession[] {
+  const byId = new Map<string, ChatSession>();
+  for (const session of sessions) {
+    if (!session?.id) continue;
+    const previous = byId.get(session.id);
+    byId.set(session.id, {
+      ...previous,
+      ...session,
+      current: Boolean(activeSessionId) && session.id === activeSessionId,
+    });
+  }
+  return [...byId.values()].sort((left, right) => (right.updatedAt || 0) - (left.updatedAt || 0));
 }
 
 async function applyHostContext(next: Partial<HostContext>): Promise<void> {
@@ -636,15 +904,14 @@ function applyTheme(theme: ThemeName): void {
 }
 
 async function loadTranslations(lang: string): Promise<void> {
-  try {
-    const response = await fetch(`/i18n/${lang}.json`, { cache: 'no-store' });
-    if (!response.ok) throw new Error(String(response.status));
-    const payload = await response.json() as Record<string, Record<string, string>>;
-    patch({ translations: payload['AILY_CHAT'] || {} });
-    document.documentElement.lang = lang;
-  } catch {
-    if (lang !== 'en') await loadTranslations('en');
-  }
+  const catalogs: Record<string, Record<string, Record<string, string>>> = {
+    en: enMessages,
+    zh_cn: zhCnMessages,
+    zh_hk: zhHkMessages,
+  };
+  const normalized = catalogs[lang] ? lang : 'en';
+  patch({ translations: catalogs[normalized]['AILY_CHAT'] || {} });
+  document.documentElement.lang = normalized;
 }
 
 function patch(next: Partial<ChatState>): void {

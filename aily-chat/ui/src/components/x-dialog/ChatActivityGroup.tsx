@@ -383,7 +383,7 @@ function groupHeader(parts: ChatPart[]): { title: string; detail: string } {
       title: getToolTitle(first),
       detail: parts.length > 1
         ? t('ACTIVITY_ITEMS', '{{count}} 项活动').replace('{{count}}', String(parts.length))
-        : getToolSubtitle(first),
+        : '',
     };
   }
   return {
@@ -412,7 +412,6 @@ function getToolSubtitle(part?: ChatPart): string {
   if (!part) return '';
   return [
     part.displayTitle && part.displayTitle !== getToolTitle(part) ? part.displayTitle : '',
-    part.displaySubtitle,
   ].filter(Boolean).join(' · ');
 }
 

@@ -19,6 +19,9 @@ const ignoredDirectoryNames = new Set([
   'vendor'
 ]);
 const frontendTopLevelDirs = new Set(['ui', 'i18n']);
+const ignoredGeneratedFrontendFiles = new Set([
+  'ui/public/fonts/fontawesome6/css/aily-chat-icons.css',
+]);
 const backendRootFiles = new Set([
   'cli.js',
   'core.js',
@@ -334,6 +337,7 @@ function classifyChange(toolDir, filePath) {
 
   const segments = relative.split('/');
   if (segments.some(segment => ignoredDirectoryNames.has(segment))) return '';
+  if (ignoredGeneratedFrontendFiles.has(relative)) return '';
 
   if (backendRootFiles.has(relative)) return 'backend';
   if (frontendTopLevelDirs.has(segments[0])) return 'frontend';
@@ -426,6 +430,19 @@ async function main() {
   let debounceTimer = null;
   let pendingChangeKind = '';
   let pendingFiles = new Set();
+  let uiBuildInProgress = false;
+
+  async function runUiBuild() {
+    if (uiBuildInProgress) return;
+    uiBuildInProgress = true;
+    try {
+      await runToolScriptIfPresent(tool.dir, 'build:ui').catch(error => {
+        console.error(`[dev] build:ui failed: ${error.message}`);
+      });
+    } finally {
+      uiBuildInProgress = false;
+    }
+  }
 
   function childEnv() {
     return {
@@ -558,11 +575,10 @@ async function main() {
       return;
     }
 
-    console.log(`[dev] frontend changed: ${Array.from(files).slice(0, 4).join(', ')}`);
-    if (Array.from(files).some(file => file.startsWith('ui/') || file.startsWith('scripts/'))) {
-      await runToolScriptIfPresent(tool.dir, 'build:ui').catch(error => {
-        console.error(`[dev] build:ui failed: ${error.message}`);
-      });
+    const fileList = Array.from(files);
+    console.log(`[dev] frontend changed: ${fileList.slice(0, 4).join(', ')}`);
+    if (fileList.some(file => file.startsWith('ui/') || file.startsWith('scripts/'))) {
+      await runUiBuild();
     }
     reloadServer.broadcast('reload', {
       reason: 'frontend',
@@ -574,7 +590,8 @@ async function main() {
     const kind = classifyChange(tool.dir, filePath);
     if (!kind) return;
 
-    pendingFiles.add(relativeToolPath(tool.dir, filePath));
+    const relativePath = relativeToolPath(tool.dir, filePath);
+    pendingFiles.add(relativePath);
     pendingChangeKind = pendingChangeKind === 'backend' || kind === 'backend' ? 'backend' : 'frontend';
 
     clearTimeout(debounceTimer);
@@ -614,7 +631,7 @@ async function main() {
   console.log(`[dev] dir: ${path.relative(rootDir, tool.dir).replace(/\\/g, '/')}`);
   console.log(`[dev] reload: ${reloadServer.url}`);
 
-  await runToolScriptIfPresent(tool.dir, 'build:ui');
+  await runUiBuild();
   await startChild();
   await watcher.start();
   console.log('[dev] watching ui/i18n for reload and backend files for restart');

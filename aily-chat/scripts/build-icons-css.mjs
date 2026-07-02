@@ -206,6 +206,16 @@ async function main() {
   const source = await readFile(sourcePath, 'utf8');
   const rules = ICONS.map(icon => extractIconRule(source, icon));
   const css = `${CSS_HEADER}\n${rules.join('\n')}\n`;
+  let existingCss = null;
+  try {
+    existingCss = await readFile(outputPath, 'utf8');
+  } catch {
+    // Output file may not exist yet.
+  }
+  if (existingCss === css) {
+    console.log(`Icons css unchanged -> ${path.relative(toolDir, outputPath).replace(/\\/g, '/')}`);
+    return;
+  }
   await writeFile(outputPath, css, 'utf8');
   console.log(`Generated ${ICONS.length} icons -> ${path.relative(toolDir, outputPath).replace(/\\/g, '/')}`);
 }

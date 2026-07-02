@@ -87,6 +87,11 @@ function groupLabel(group: SessionGroup['id']): string {
   return '';
 }
 
+function sessionIdentity(session: ChatSession): string {
+  const legacySessionId = (session as ChatSession & { sessionId?: unknown }).sessionId;
+  return String(session.id || legacySessionId || '').trim();
+}
+
 interface SessionGroup {
   id: 'pinned' | 'today' | 'yesterday' | 'week' | 'older' | 'archived';
   sessions: ChatSession[];
@@ -243,6 +248,7 @@ export function SessionList({
   const [openOverflowSessionId, setOpenOverflowSessionId] = useState('');
   const panelRef = useRef<HTMLElement>(null);
   const groups = useMemo(() => groupSessionsByDate(sessions), [sessions]);
+  const selectedSessionId = String(activeSessionId || '').trim();
 
   useEffect(() => {
     const close = (event: MouseEvent) => {
@@ -288,15 +294,15 @@ export function SessionList({
                 {groupLabel(group.id) && <div className="session-list-section-label">{groupLabel(group.id)}</div>}
                 {group.sessions.map(session => (
                   <SessionRow
-                    key={session.id}
+                    key={sessionIdentity(session)}
                     session={session}
-                    active={session.id === activeSessionId}
-                    overflowOpen={openOverflowSessionId === session.id}
+                    active={Boolean(selectedSessionId) && sessionIdentity(session) === selectedSessionId}
+                    overflowOpen={openOverflowSessionId === sessionIdentity(session)}
                     onSelect={() => {
                       setOpenOverflowSessionId('');
-                      onSelect(session.id);
+                      onSelect(sessionIdentity(session));
                     }}
-                    onToggleOverflow={() => setOpenOverflowSessionId(current => current === session.id ? '' : session.id)}
+                    onToggleOverflow={() => setOpenOverflowSessionId(current => current === sessionIdentity(session) ? '' : sessionIdentity(session))}
                     onAction={action => void handleSessionAction(session, action)}
                   />
                 ))}

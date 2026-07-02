@@ -17,6 +17,7 @@ import {
   loadDraft,
   menuOptionOpensSettings,
   saveDraft,
+  stopTurn,
   t,
   useChatState,
 } from './protocol';
@@ -766,7 +767,7 @@ export default function App() {
                       }
                     }}
                     onSubmit={value => void submit(value)}
-                    onCancel={() => void invoke('turn.stop', { sessionId: chat.activeSessionId })}
+                    onCancel={() => void stopTurn(chat.activeSessionId || '')}
                     header={!!chat.resources?.length && (
                       <div className="resource-list">
                         {chat.resources.map((resource, index) => (
@@ -848,7 +849,7 @@ export default function App() {
                         </button>
                         {turnActive
                           ? (
-                            <button type="button" className="primary-action stop-action" onClick={() => void invoke('turn.stop', { sessionId: chat.activeSessionId })}>
+                            <button type="button" className="primary-action stop-action" onClick={() => void stopTurn(chat.activeSessionId || '')}>
                               <span className="stop-box">
                                 <FaIcon icon="stop" />
                               </span>
