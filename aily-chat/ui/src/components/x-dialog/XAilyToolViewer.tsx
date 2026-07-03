@@ -11,9 +11,11 @@ export function XAilyToolViewer({ part }: { part: ChatPart }) {
       {part.args !== undefined && <ActivitySection title="输入" value={part.args} />}
       {output && (
         <ActivitySection title="输出">
-          {output.length >= LARGE_TOOL_OUTPUT_THRESHOLD
-            ? <pre className="x-aily-tool-output-plain">{output}</pre>
-            : <XAilyMarkdownViewer content={output} streaming={part.state === 'doing'} />}
+          <div className="x-aily-tool-output-detail">
+            {output.length >= LARGE_TOOL_OUTPUT_THRESHOLD
+              ? <pre className="x-aily-tool-output-plain">{output}</pre>
+              : <XAilyMarkdownViewer content={output} streaming={part.state === 'doing'} />}
+          </div>
         </ActivitySection>
       )}
       {part.detail && <div className="x-aily-activity-note">{part.detail}</div>}

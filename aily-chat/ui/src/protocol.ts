@@ -113,6 +113,14 @@ export interface ChatNotice {
   actionLabel?: string;
 }
 
+export interface ChatComposerAction {
+  id: string;
+  label: string;
+  iconClass?: string;
+  enabled?: boolean;
+  active?: boolean;
+}
+
 export interface ChatMenuOption {
   id: string;
   label: string;
@@ -269,6 +277,7 @@ export interface ChatBootstrap {
   title?: string;
   inputValue?: string;
   resources?: ChatResource[];
+  composerActions?: ChatComposerAction[];
   todos?: ChatTodo[];
   notices?: ChatNotice[];
   modeId?: string;
@@ -366,6 +375,7 @@ let state: ChatState = {
   title: '',
   inputValue: '',
   resources: [],
+  composerActions: [],
   todos: [],
   notices: [],
   modeId: 'agent',

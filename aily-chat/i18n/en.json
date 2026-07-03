@@ -21,6 +21,7 @@
     "ATTACH": "Attach context",
     "ADD_FILE": "Add file",
     "ADD_FOLDER": "Add folder",
+    "CODE_TRACEBACK": "Code traceback",
     "SEARCH_MODEL": "Search models",
     "PERMISSION": "Permission",
     "PERMISSION_DEFAULT": "Ask before changes",

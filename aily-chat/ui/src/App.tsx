@@ -11,6 +11,7 @@ import type { SenderRef } from '@ant-design/x/es/sender';
 import { theme as antdTheme } from 'antd';
 import {
   bootstrap,
+  ChatComposerAction,
   ChatMenuOption,
   ChatTodo,
   invoke,
@@ -226,6 +227,7 @@ export default function App() {
   const [contextToolbarVisible, setContextToolbarVisible] = useState(false);
   const [editingTurnId, setEditingTurnId] = useState<string | null>(null);
   const [todoFocused, setTodoFocused] = useState(false);
+  const [codeTracebackEnabled, setCodeTracebackEnabled] = useState(false);
   const timelineRef = useRef<HTMLDivElement>(null);
   const windowBoxRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<SenderRef>(null);
@@ -362,7 +364,7 @@ export default function App() {
   useEffect(() => {
     const timeline = timelineRef.current;
     const content = timeline?.querySelector<HTMLElement>('.dialogs');
-    if (chat.runState !== 'running' || !timeline || !content || typeof ResizeObserver === 'undefined') {
+    if (!timeline || !content || typeof ResizeObserver === 'undefined') {
       return;
     }
 
@@ -386,7 +388,7 @@ export default function App() {
         window.cancelAnimationFrame(frameId);
       }
     };
-  }, [chat.activeSessionId, chat.runState]);
+  }, [chat.activeSessionId, chat.paneSurface]);
 
   function handleDialogScroll(): void {
     const timeline = timelineRef.current;
@@ -475,8 +477,11 @@ export default function App() {
   async function submit(value = draft): Promise<void> {
     const text = value.trim();
     if (!text) return;
+    const codeTracebackAction = composerActionById(chat.composerActions, 'codeTraceback');
+    const useCodeTraceback = codeTracebackEnabled && (codeTracebackAction?.enabled ?? true);
     dialogAutoScrollEnabledRef.current = true;
     setDraft('');
+    setCodeTracebackEnabled(false);
     saveDraft('');
     try {
       // turn.send resolves only when the host finishes the turn, so it runs
@@ -490,8 +495,10 @@ export default function App() {
         modeId: chat.modeId,
         modelId: chat.activeModelId,
         permissionMode: chat.permissionMode,
+        codeTraceback: useCodeTraceback,
       });
     } catch {
+      setCodeTracebackEnabled(useCodeTraceback);
       setDraft(current => {
         if (current) return current;
         saveDraft(text);
@@ -601,6 +608,9 @@ export default function App() {
   const sessionSidebarWidth = draggingSidebarWidth ?? chat.sessionSidebarWidth ?? 300;
   const lastAilyTurnId = [...chat.turns].reverse().find(turn => turn.role === 'aily')?.id ?? null;
   const activeSessionTitle = chat.sessions.find(item => item.id === chat.activeSessionId)?.title;
+  const codeTracebackAction = composerActionById(chat.composerActions, 'codeTraceback');
+  const codeTracebackAvailable = codeTracebackAction?.enabled ?? true;
+  const codeTracebackActive = codeTracebackAvailable && codeTracebackEnabled;
 
   const sessionSidebar = (variant: 'sidebar' | 'entry', className: string) => (
     <aside className={className} style={{ width: sessionSidebarWidth }}>
@@ -847,6 +857,17 @@ export default function App() {
                         <button type="button" className="composer-model-chip" onClick={event => toggleMenu('model', event)}>
                           <FaIcon icon="star-christmas" /><span>{chat.modelOptions?.find(option => option.id === chat.activeModelId)?.label || chat.models.find(model => model.id === chat.activeModelId)?.label || chat.activeModelId}</span>
                         </button>
+                        <button
+                          type="button"
+                          className="toolbar-button code-traceback-action"
+                          data-active={codeTracebackActive}
+                          disabled={!codeTracebackAvailable || turnActive}
+                          title={codeTracebackAction?.label || t('CODE_TRACEBACK', '代码回溯')}
+                          aria-pressed={codeTracebackActive}
+                          onClick={() => setCodeTracebackEnabled(value => !value)}
+                        >
+                          <FaIcon iconClass={composerActionIconClass(codeTracebackAction, 'fa-light fa-clock-rotate-left')} />
+                        </button>
                         {turnActive
                           ? (
                             <button type="button" className="primary-action stop-action" onClick={() => void stopTurn(chat.activeSessionId || '')}>
@@ -883,4 +904,16 @@ export default function App() {
       </main>
     </XProvider>
   );
+}
+
+function composerActionById(actions: ChatComposerAction[] | undefined, id: string): ChatComposerAction | undefined {
+  return actions?.find(action => action.id === id);
+}
+
+function composerActionIconClass(action: ChatComposerAction | undefined, fallback: string): string {
+  const iconClass = action?.iconClass?.trim();
+  if (!iconClass || iconClass.includes('fa-code-compare')) {
+    return fallback;
+  }
+  return iconClass;
 }

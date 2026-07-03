@@ -16,6 +16,15 @@
   contain-intrinsic-size: 360px; overflow: auto; word-break: normal; overflow-wrap: normal;
   white-space: pre;
 }
+.x-aily-tool-output-detail {
+  box-sizing: border-box; max-height: min(360px, 48vh); padding: 10px; overflow: auto;
+  overscroll-behavior: contain; scrollbar-gutter: stable;
+}
+.x-aily-tool-output-detail .x-aily-markdown-viewer > :first-child { margin-top: 0; }
+.x-aily-tool-output-detail .x-aily-markdown-viewer > :last-child { margin-bottom: 0; }
+.x-aily-tool-output-detail .x-aily-tool-output-plain {
+  max-height: none; padding: 0; overflow: visible; contain: none; content-visibility: visible;
+}
 .x-aily-activity-note { padding: 3px 1px; opacity: .8; }
 .x-aily-state-copy { padding: 3px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .x-aily-state-progress { height: 2px; margin: 4px 0 6px; overflow: hidden; border-radius: 2px; background: var(--chat-border); }

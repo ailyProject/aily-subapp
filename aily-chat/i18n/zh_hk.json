@@ -21,6 +21,7 @@
     "ATTACH": "加入內容",
     "ADD_FILE": "加入檔案",
     "ADD_FOLDER": "加入資料夾",
+    "CODE_TRACEBACK": "代碼回溯",
     "SEARCH_MODEL": "搜尋模型",
     "PERMISSION": "權限",
     "PERMISSION_DEFAULT": "修改前詢問",

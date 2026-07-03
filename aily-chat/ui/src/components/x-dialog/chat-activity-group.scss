@@ -62,6 +62,10 @@
   transform: translateY(-2px);
   pointer-events: none;
 }
+.cag-detail-viewport-open:not(.cag-detail-viewport-fixed) {
+  max-height: none;
+  overflow: visible;
+}
 .cag-detail-viewport-fixed {
   max-height: 200px; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin;
   scrollbar-color: var(--chat-border, rgba(255,255,255,.1)) transparent; scrollbar-gutter: stable;
