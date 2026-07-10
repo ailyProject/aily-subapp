@@ -1,4 +1,0 @@
-interface:
-  display_name: "Aily Chat"
-  short_description: "AI coding assistant for Aily Blockly"
-  default_prompt: "Use $aily-chat to debug a aily-chat workflow."
