@@ -1,0 +1,245 @@
+<main class="video-converter">
+  <header class="app-header">
+    <div class="app-title">
+      <h1>{{ t('TITLE', 'Aily Video Converter') }}</h1>
+      <p>{{ t('DESCRIPTION', 'Convert images and MP4 videos into display-ready AILY frame files.') }}</p>
+    </div>
+    <span class="backend-state" [class.ready]="backendStatus === 'ready'">
+      <span class="state-dot"></span>
+      {{ backendStatus === 'ready' ? t('BACKEND_READY', 'Ready') : t('BACKEND_CONNECTING', 'Connecting') }}
+    </span>
+  </header>
+
+  <div class="converter-layout">
+    <aside class="settings-panel">
+      <section class="panel-section source-section">
+        <div class="section-heading">
+          <div>
+            <h2>{{ t('SOURCE_FILE', 'Source file') }}</h2>
+            <p>{{ t('SUPPORTED_FORMATS', 'JPG / PNG / WebP / GIF / MP4') }}</p>
+          </div>
+          @if (sourceFile) {
+            <button class="text-button" type="button" (click)="chooseFile()" [disabled]="converting">
+              {{ t('CHANGE', 'Change') }}
+            </button>
+          }
+        </div>
+
+        <input
+          #fileInput
+          class="file-input"
+          type="file"
+          [accept]="accept"
+          (change)="onFileInputChange($event)"
+        />
+        <button
+          class="drop-zone"
+          type="button"
+          [class.dragging]="dragging"
+          [class.has-file]="sourceFile"
+          [disabled]="converting"
+          (click)="chooseFile()"
+          (dragover)="onDragOver($event)"
+          (dragleave)="onDragLeave($event)"
+          (drop)="onDrop($event)"
+        >
+          @if (sourceFile) {
+            <span class="media-mark" aria-hidden="true">{{ sourceIsVideo ? '▶' : '▣' }}</span>
+            <span class="source-name" [title]="sourceFile.name">{{ sourceFile.name }}</span>
+            <span class="source-meta">{{ sourceDescription }}</span>
+          } @else {
+            <span class="upload-mark" aria-hidden="true">↑</span>
+            <span>{{ t('SELECT_OR_DROP', 'Select or drop a media file') }}</span>
+            <span class="source-meta">{{ t('SOURCE_LIMIT', 'Source file limit: 512 MiB') }}</span>
+          }
+        </button>
+      </section>
+
+      <section class="panel-section">
+        <div class="section-heading">
+          <div>
+            <h2>{{ t('OUTPUT_SETTINGS', 'Output settings') }}</h2>
+            <p>{{ t('LITTLE_ENDIAN_HINT', 'All multi-byte integers use little-endian byte order') }}</p>
+          </div>
+        </div>
+
+        <div class="input-grid dimensions">
+          <label>
+            <span>{{ t('WIDTH', 'Width') }}</span>
+            <input type="number" min="1" max="4096" step="1" [(ngModel)]="width" (ngModelChange)="onSettingsChange()" />
+          </label>
+          <label>
+            <span>{{ t('HEIGHT', 'Height') }}</span>
+            <input type="number" min="1" max="4096" step="1" [(ngModel)]="height" (ngModelChange)="onSettingsChange()" />
+          </label>
+        </div>
+
+        <div class="fps-row">
+          <label>
+            <span>{{ t('FPS_NUMERATOR', 'FPS numerator') }}</span>
+            <input type="number" min="1" step="1" [(ngModel)]="fpsNumerator" (ngModelChange)="onSettingsChange()" />
+          </label>
+          <span class="fraction-line">/</span>
+          <label>
+            <span>{{ t('FPS_DENOMINATOR', 'FPS denominator') }}</span>
+            <input type="number" min="1" step="1" [(ngModel)]="fpsDenominator" (ngModelChange)="onSettingsChange()" />
+          </label>
+          <span class="fps-result">{{ fpsValue | number:'1.0-3' }} FPS</span>
+        </div>
+
+        <label class="full-input">
+          <span>{{ t('MAX_FRAMES', 'Maximum frames') }}</span>
+          <input type="number" min="1" max="10000" step="1" [(ngModel)]="maxFrames" (ngModelChange)="onSettingsChange()" />
+        </label>
+        <div class="preset-row" aria-label="FPS presets">
+          <button type="button" (click)="setFps(15, 1)">15</button>
+          <button type="button" (click)="setFps(24, 1)">24</button>
+          <button type="button" (click)="setFps(30, 1)">30</button>
+          <button type="button" (click)="setFps(30000, 1001)">29.97</button>
+        </div>
+      </section>
+
+      <section class="panel-section">
+        <h2>{{ t('PIXEL_FORMAT', 'Pixel format') }}</h2>
+        <div class="format-list">
+          @for (option of formatOptions; track option.value) {
+            <button
+              type="button"
+              class="format-option"
+              [class.active]="pixelFormat === option.value"
+              [attr.aria-pressed]="pixelFormat === option.value"
+              (click)="selectFormat(option.value)"
+            >
+              <span class="format-title">{{ option.title }}</span>
+              <span>{{ option.detail }}</span>
+            </button>
+          }
+        </div>
+
+        @if (pixelFormat === 'mono') {
+          <div class="mono-options">
+            <label class="threshold-input">
+              <span>{{ t('MONO_THRESHOLD', 'Binarization threshold') }}</span>
+              <input type="number" min="0" max="255" step="1" [(ngModel)]="monoThreshold" (ngModelChange)="onSettingsChange()" />
+            </label>
+            <label class="check-row">
+              <input type="checkbox" [(ngModel)]="monoDither" (ngModelChange)="onSettingsChange()" />
+              <span>{{ t('MONO_DITHER', 'Floyd–Steinberg dithering') }}</span>
+            </label>
+            <label class="check-row">
+              <input type="checkbox" [(ngModel)]="monoInvert" (ngModelChange)="onSettingsChange()" />
+              <span>{{ t('MONO_INVERT', 'Invert monochrome pixels') }}</span>
+            </label>
+          </div>
+        }
+
+        <label class="check-row loop-row">
+          <input type="checkbox" [(ngModel)]="loop" (ngModelChange)="onSettingsChange()" />
+          <span>{{ t('LOOP_FLAG', 'Set the suggested loop flag (flags bit 0)') }}</span>
+        </label>
+      </section>
+
+      <div class="estimate-row">
+        <span>{{ t('ESTIMATED_LIMIT', 'Estimated maximum') }}</span>
+        <strong>{{ formatBytes(estimatedDataSize + 40) }}</strong>
+      </div>
+      @if (converting) {
+        <button class="primary-button danger" type="button" (click)="cancelConversion()">
+          {{ t('CANCEL_CONVERSION', 'Cancel conversion') }}
+        </button>
+      } @else {
+        <button class="primary-button" type="button" (click)="convert()" [disabled]="!sourceFile">
+          {{ t('START_CONVERSION', 'Start conversion') }}
+        </button>
+      }
+    </aside>
+
+    <section class="preview-panel">
+      <div class="preview-header">
+        <div>
+          <h2>{{ t('PREVIEW', 'Output preview') }}</h2>
+          <p class="status-text">{{ statusText }}</p>
+        </div>
+        @if (result) {
+          <span class="extension-badge">{{ outputExtension }}</span>
+        }
+      </div>
+
+      @if (converting) {
+        <div class="progress-card" role="progressbar" aria-valuemin="0" aria-valuemax="100" [attr.aria-valuenow]="progress * 100">
+          <span class="spinner" aria-hidden="true"></span>
+          <div class="progress-track"><div class="progress-value" [style.width.%]="progress * 100"></div></div>
+          <span class="progress-label">{{ progressLabel }}</span>
+        </div>
+      }
+
+      <div class="canvas-stage" [class.empty]="!result">
+        @if (result) {
+          <div class="canvas-grid"><canvas #previewCanvas></canvas></div>
+        } @else if (!converting) {
+          <div class="empty-state">
+            <span class="preview-mark" aria-hidden="true">▦</span>
+            <strong>{{ t('OUTPUT_PREVIEW_EMPTY', 'The packed pixel preview will appear here') }}</strong>
+            <span>{{ t('PREVIEW_EXPLANATION', 'Preview pixels are decoded from the exported bytes to verify RGB565 byte order and XBM bit order.') }}</span>
+          </div>
+        }
+      </div>
+
+      @if (result) {
+        <div class="playback-bar">
+          <button
+            class="icon-button"
+            type="button"
+            (click)="togglePreview()"
+            [disabled]="result.frameCount <= 1"
+            [attr.aria-label]="playing ? t('STOP_PREVIEW', 'Stop preview') : t('PLAY_PREVIEW', 'Play preview')"
+          >
+            {{ playing ? '■' : '▶' }}
+          </button>
+          <input
+            class="timeline"
+            type="range"
+            min="0"
+            [max]="result.frameCount - 1"
+            step="1"
+            [value]="currentFrame"
+            (input)="onFrameChange($any($event.target).value)"
+          />
+          <span>{{ currentFrame + 1 }} / {{ result.frameCount }}</span>
+        </div>
+
+        <div class="result-grid">
+          <div><span>{{ t('SIZE', 'Size') }}</span><strong>{{ result.width }} × {{ result.height }}</strong></div>
+          <div><span>{{ t('FORMAT', 'Format') }}</span><strong>{{ formatName(result.pixelFormat) }}</strong></div>
+          <div><span>{{ t('FPS', 'FPS') }}</span><strong>{{ result.fpsNumerator }} / {{ result.fpsDenominator }}</strong></div>
+          <div><span>{{ t('FRAME_COUNT', 'Frames') }}</span><strong>{{ result.frameCount }}</strong></div>
+          <div><span>{{ t('FRAME_SIZE', 'Per frame') }}</span><strong>{{ formatBytes(result.frameSize) }}</strong></div>
+          <div><span>{{ t('FILE_SIZE', 'File size') }}</span><strong>{{ formatBytes(resultFileSize) }}</strong></div>
+        </div>
+
+        <div class="file-structure">
+          <span>{{ t('HEADER_BYTES', '40 B header') }}</span>
+          <span>+</span>
+          <span>{{ t('FRAME_DATA', '{count} x {size} B frame data', { count: result.frameCount, size: result.frameSize }) }}</span>
+        </div>
+
+        <button class="export-button" type="button" (click)="exportFile()">
+          <span aria-hidden="true">↓</span>
+          <span>{{ t('EXPORT', 'Export {name}', { name: suggestedFileName }) }}</span>
+        </button>
+      }
+    </section>
+  </div>
+
+  @if (noticeText) {
+    <div
+      class="notice"
+      [class.success]="noticeType === 'success'"
+      [class.warning]="noticeType === 'warning'"
+      [class.error]="noticeType === 'error'"
+      role="status"
+    >
+      {{ noticeText }}
+    </div>
+  }
+</main>

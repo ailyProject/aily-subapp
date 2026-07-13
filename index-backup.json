@@ -1,0 +1,20 @@
+{
+  "video-converter": {
+    "id": "video-converter",
+    "titleKey": "VIDEO_CONVERTER.TITLE",
+    "namespace": "VIDEO_CONVERTER",
+    "app": {
+      "name": "VIDEO_CONVERTER.TITLE",
+      "description": "VIDEO_CONVERTER.DESCRIPTION",
+      "icon": "fa-light fa-photo-film",
+      "enabled": true
+    },
+    "childDir": "tools/video-converter",
+    "routePath": "/child-tool/video-converter",
+    "requiredDependencies": [
+      "penpal",
+      "ws"
+    ],
+    "installHint": "Run npm install --prefix video-converter and npm install --prefix video-converter/ui in the project root."
+  }
+}

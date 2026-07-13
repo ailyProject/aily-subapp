@@ -1,0 +1,23 @@
+{
+  "name": "@aily-project/subapp-video-converter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Convert JPG, PNG, WebP, GIF and MP4 media into AILY display frame files",
+  "main": "index.js",
+  "bin": {
+    "aily-video-converter": "index.js"
+  },
+  "scripts": {
+    "start": "node index.js rpc",
+    "serve": "node index.js serve",
+    "build:ui": "node scripts/build-ui.mjs",
+    "install:ui": "npm install --prefix ui",
+    "cli": "node index.js",
+    "status": "node index.js status",
+    "format-info": "node index.js format-info"
+  },
+  "dependencies": {
+    "penpal": "^7.0.6",
+    "ws": "^8.21.0"
+  }
+}

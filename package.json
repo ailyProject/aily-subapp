@@ -11,9 +11,11 @@
     "dev:serial": "node scripts/dev-tool.mjs serial-debugger",
     "dev:swd": "node scripts/dev-tool.mjs swd-debugger",
     "dev:u8g2-font": "node scripts/dev-tool.mjs u8g2-font-generator",
+    "dev:video": "node scripts/dev-tool.mjs video-converter",
     "build": "node scripts/build-tools.mjs",
     "build:swd": "node scripts/build-tools.mjs swd-debugger",
     "build:u8g2-font": "node scripts/build-tools.mjs u8g2-font-generator",
+    "build:video": "node scripts/build-tools.mjs video-converter",
     "build:tools": "node scripts/build-tools.mjs"
   },
   "devDependencies": {
