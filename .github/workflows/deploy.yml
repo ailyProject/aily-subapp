@@ -1,0 +1,556 @@
+name: Check and Deploy Subapps to NPM
+
+on:
+  push:
+    branches:
+      - deploy
+
+permissions:
+  contents: read
+
+env:
+  EXPECTED_PACKAGE_COUNT: '9'
+
+jobs:
+  build-packages:
+    name: Build packages
+    runs-on: macos-15
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    env:
+      NPM_CONFIG_FETCH_RETRIES: 5
+      NPM_CONFIG_FETCH_RETRY_MINTIMEOUT: 10000
+      NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: 120000
+      NPM_CONFIG_FETCH_TIMEOUT: 300000
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          clean: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: '**/package-lock.json'
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+
+          npm ci
+
+          shopt -s nullglob
+          package_files=(*/package.json)
+          if [ "${#package_files[@]}" -ne "$EXPECTED_PACKAGE_COUNT" ]; then
+            echo "Expected $EXPECTED_PACKAGE_COUNT top-level subapp packages, found ${#package_files[@]}."
+            exit 1
+          fi
+
+          for package_file in "${package_files[@]}"; do
+            project_dir="$(dirname "$package_file")"
+            if [ ! -f "$project_dir/package-lock.json" ]; then
+              echo "Missing lockfile: $project_dir/package-lock.json"
+              exit 1
+            fi
+
+            echo "Installing $project_dir"
+            npm ci --prefix "$project_dir"
+
+            if [ -f "$project_dir/ui/package.json" ] && [ -f "$project_dir/ui/package-lock.json" ]; then
+              echo "Installing $project_dir/ui"
+              npm ci --prefix "$project_dir/ui"
+            fi
+          done
+
+      - name: Build packages
+        run: npm run build
+
+      - name: Check and pack npm packages
+        run: |
+          set -euo pipefail
+
+          package_dir="$RUNNER_TEMP/subapp-npm-packages-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          pack_results_dir="$RUNNER_TEMP/subapp-pack-results-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          if [ -e "$package_dir" ] || [ -e "$pack_results_dir" ]; then
+            echo "Temporary package paths already exist."
+            exit 1
+          fi
+          mkdir -p "$package_dir" "$pack_results_dir"
+
+          shopt -s nullglob
+          package_jsons=(dist/*/package.json)
+          if [ "${#package_jsons[@]}" -ne "$EXPECTED_PACKAGE_COUNT" ]; then
+            echo "Expected $EXPECTED_PACKAGE_COUNT built packages, found ${#package_jsons[@]}."
+            exit 1
+          fi
+
+          for package_json in "${package_jsons[@]}"; do
+            dist_dir="$(dirname "$package_json")"
+            package_id="$(basename "$dist_dir")"
+            echo "Checking $package_id"
+            npm pack --dry-run "./$dist_dir"
+            npm pack "./$dist_dir" \
+              --pack-destination "$package_dir" \
+              --json > "$pack_results_dir/$package_id.json"
+          done
+
+          export PACKAGE_DIR="$package_dir"
+          export PACK_RESULTS_DIR="$pack_results_dir"
+          node --input-type=module - <<'NODE'
+          import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+          import path from 'node:path'
+
+          const expectedCount = Number(process.env.EXPECTED_PACKAGE_COUNT)
+          const packageDir = process.env.PACKAGE_DIR
+          const packResultsDir = process.env.PACK_RESULTS_DIR
+          const distRoot = path.resolve('dist')
+          const ids = readdirSync(distRoot, { withFileTypes: true })
+            .filter(entry => entry.isDirectory() && existsSync(path.join(distRoot, entry.name, 'package.json')))
+            .map(entry => entry.name)
+            .sort()
+
+          if (ids.length !== expectedCount) {
+            throw new Error(`Expected ${expectedCount} package directories, found ${ids.length}`)
+          }
+
+          const packages = ids.map(id => {
+            const metadata = JSON.parse(readFileSync(path.join(distRoot, id, 'package.json'), 'utf8'))
+            if (typeof metadata.name !== 'string' || !metadata.name.trim()) {
+              throw new Error(`${id} package name is missing`)
+            }
+            if (typeof metadata.version !== 'string' || !metadata.version.trim()) {
+              throw new Error(`${id} package version is missing`)
+            }
+            if (metadata.private === true) {
+              throw new Error(`${id} build output is still marked private`)
+            }
+
+            const packResult = JSON.parse(readFileSync(path.join(packResultsDir, `${id}.json`), 'utf8'))
+            if (!Array.isArray(packResult) || packResult.length !== 1) {
+              throw new Error(`${id} npm pack did not return exactly one result`)
+            }
+
+            const packed = packResult[0]
+            if (packed.name !== metadata.name || packed.version !== metadata.version) {
+              throw new Error(`${id} packed metadata does not match dist/package.json`)
+            }
+
+            const packedFiles = new Set((packed.files || []).map(file => file.path))
+            for (const requiredFile of [
+              'index.js',
+              'ui/index.html',
+              'i18n/en.json',
+              'vendor/penpal.min.js'
+            ]) {
+              if (!packedFiles.has(requiredFile)) {
+                throw new Error(`${id} tarball is missing ${requiredFile}`)
+              }
+            }
+
+            const tarball = path.basename(String(packed.filename || ''))
+            if (!tarball.endsWith('.tgz') || !existsSync(path.join(packageDir, tarball))) {
+              throw new Error(`${id} tarball is missing: ${tarball || '(empty filename)'}`)
+            }
+
+            return {
+              id,
+              name: metadata.name,
+              version: metadata.version,
+              tarball
+            }
+          })
+
+          for (const field of ['id', 'name', 'tarball']) {
+            const values = packages.map(entry => entry[field])
+            if (new Set(values).size !== values.length) {
+              throw new Error(`Duplicate package ${field} in manifest`)
+            }
+          }
+
+          const tarballs = readdirSync(packageDir).filter(file => file.endsWith('.tgz'))
+          if (tarballs.length !== expectedCount) {
+            throw new Error(`Expected ${expectedCount} tarballs, found ${tarballs.length}`)
+          }
+
+          writeFileSync(
+            path.join(packageDir, 'manifest.json'),
+            `${JSON.stringify({ formatVersion: 1, packages }, null, 2)}\n`,
+            'utf8'
+          )
+          NODE
+
+          cat "$package_dir/manifest.json"
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: subapp-npm-packages
+          path: ${{ runner.temp }}/subapp-npm-packages-${{ github.run_id }}-${{ github.run_attempt }}/*
+          if-no-files-found: error
+
+  publish-default:
+    name: Publish default registry
+    needs: build-packages
+    runs-on: [self-hosted, ailydeMac-mini, macOS, ARM64]
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    env:
+      NPM_CONFIG_FETCH_RETRIES: 5
+      NPM_CONFIG_FETCH_RETRY_MINTIMEOUT: 10000
+      NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: 120000
+      NPM_CONFIG_FETCH_TIMEOUT: 300000
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: ${{ secrets.REGISTRY_URL }}
+
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          name: subapp-npm-packages
+          path: ${{ runner.temp }}/subapp-npm-packages-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Publish packages to default registry
+        env:
+          REGISTRY_URL: ${{ secrets.REGISTRY_URL }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$REGISTRY_URL" ] || [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "REGISTRY_URL or NPM_TOKEN is not set."
+            exit 1
+          fi
+
+          retry_with_backoff() {
+            local max_attempts="$1"
+            local sleep_seconds="$2"
+            shift 2
+            local attempt=1
+
+            until "$@"; do
+              if [ "$attempt" -ge "$max_attempts" ]; then
+                echo "Command failed after ${max_attempts} attempts: $*"
+                return 1
+              fi
+              echo "Attempt ${attempt}/${max_attempts} failed. Retrying in ${sleep_seconds}s: $*"
+              sleep "$sleep_seconds"
+              attempt=$((attempt + 1))
+              sleep_seconds=$((sleep_seconds * 2))
+            done
+          }
+
+          package_dir="$RUNNER_TEMP/subapp-npm-packages-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          manifest="$package_dir/manifest.json"
+          package_list="$RUNNER_TEMP/subapp-packages-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.tsv"
+          if [ ! -f "$manifest" ]; then
+            echo "Package manifest not found: $manifest"
+            exit 1
+          fi
+
+          export MANIFEST_PATH="$manifest"
+          export PACKAGE_DIR="$package_dir"
+          node --input-type=module - > "$package_list" <<'NODE'
+          import { existsSync, readFileSync } from 'node:fs'
+          import path from 'node:path'
+
+          const expectedCount = Number(process.env.EXPECTED_PACKAGE_COUNT)
+          const manifest = JSON.parse(readFileSync(process.env.MANIFEST_PATH, 'utf8'))
+          if (!Array.isArray(manifest.packages) || manifest.packages.length !== expectedCount) {
+            throw new Error(`Expected ${expectedCount} manifest packages`)
+          }
+
+          for (const entry of manifest.packages) {
+            const values = [entry.name, entry.version, entry.tarball]
+            if (values.some(value => typeof value !== 'string' || !value || /[\t\r\n]/.test(value))) {
+              throw new Error('Manifest contains invalid package metadata')
+            }
+            if (path.basename(entry.tarball) !== entry.tarball) {
+              throw new Error(`Invalid tarball path: ${entry.tarball}`)
+            }
+            if (!existsSync(path.join(process.env.PACKAGE_DIR, entry.tarball))) {
+              throw new Error(`Missing tarball: ${entry.tarball}`)
+            }
+            process.stdout.write(`${entry.name}\t${entry.version}\t${entry.tarball}\n`)
+          }
+          NODE
+
+          package_count=0
+          while IFS=$'\t' read -r package_name package_version tarball_name; do
+            [ -n "$package_name" ] || continue
+            package_count=$((package_count + 1))
+            package_tarball="$package_dir/$tarball_name"
+
+            echo "Package: $package_name@$package_version"
+            if npm view "$package_name@$package_version" version &> /dev/null; then
+              echo "Version $package_version exists, unpublishing..."
+              retry_with_backoff 3 3 npm unpublish "$package_name@$package_version" --force
+              sleep 5
+            fi
+
+            retry_with_backoff 5 5 npm publish "$package_tarball"
+            retry_with_backoff 5 5 npm view "$package_name@$package_version" version
+          done < "$package_list"
+
+          if [ "$package_count" -ne "$EXPECTED_PACKAGE_COUNT" ]; then
+            echo "Expected $EXPECTED_PACKAGE_COUNT published packages, processed $package_count."
+            exit 1
+          fi
+
+      - name: Notify cache bump
+        env:
+          NOTIFY_URL: ${{ secrets.NOTIFY_URL }}
+          NOTIFY_TOKEN: ${{ secrets.NOTIFY_TOKEN }}
+        run: |
+          if [ -z "$NOTIFY_URL" ] || [ -z "$NOTIFY_TOKEN" ]; then
+            echo "NOTIFY_URL or NOTIFY_TOKEN not set, skipping."
+            exit 0
+          fi
+          echo "Sending POST request to $NOTIFY_URL"
+          set +e
+          HTTP_STATUS=$(curl -s -o "$RUNNER_TEMP/notify-response.txt" -w "%{http_code}" --max-time 30 \
+            -X POST "$NOTIFY_URL" \
+            -H "Authorization: Bearer $NOTIFY_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{}')
+          CURL_EXIT=$?
+          set -e
+          if [ "$CURL_EXIT" -ne 0 ]; then
+            echo "::warning::Notification request failed (curl exit code $CURL_EXIT)"
+          elif [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+            echo "Notification sent successfully (HTTP $HTTP_STATUS)"
+          else
+            echo "::warning::Notification failed with HTTP status $HTTP_STATUS"
+            cat "$RUNNER_TEMP/notify-response.txt" || true
+          fi
+
+  publish-registry2:
+    name: Publish registry 2
+    needs: build-packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    env:
+      NPM_CONFIG_FETCH_RETRIES: 5
+      NPM_CONFIG_FETCH_RETRY_MINTIMEOUT: 10000
+      NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: 120000
+      NPM_CONFIG_FETCH_TIMEOUT: 300000
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          name: subapp-npm-packages
+          path: ${{ runner.temp }}/subapp-npm-packages-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Publish packages to registry 2
+        env:
+          REGISTRY_2: ${{ secrets.REGISTRY_URL_2 }}
+          TOKEN_2: ${{ secrets.NPM_TOKEN_2 }}
+        run: |
+          set -euo pipefail
+
+          retry_with_backoff() {
+            local max_attempts="$1"
+            local sleep_seconds="$2"
+            shift 2
+            local attempt=1
+
+            until "$@"; do
+              if [ "$attempt" -ge "$max_attempts" ]; then
+                echo "Command failed after ${max_attempts} attempts: $*"
+                return 1
+              fi
+              echo "Attempt ${attempt}/${max_attempts} failed. Retrying in ${sleep_seconds}s: $*"
+              sleep "$sleep_seconds"
+              attempt=$((attempt + 1))
+              sleep_seconds=$((sleep_seconds * 2))
+            done
+          }
+
+          if [ -z "$REGISTRY_2" ] || [ -z "$TOKEN_2" ]; then
+            echo "Registry 2 secrets not set, skipping."
+            exit 0
+          fi
+
+          registry_2_no_proto="${REGISTRY_2#http://}"
+          registry_2_no_proto="${registry_2_no_proto#https://}"
+          registry_2_no_proto="${registry_2_no_proto%/}"
+          npmrc="$RUNNER_TEMP/npmrc-registry2-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          printf 'registry=%s\n' "$REGISTRY_2" > "$npmrc"
+          printf '//%s/:_authToken=%s\n' "$registry_2_no_proto" "$TOKEN_2" >> "$npmrc"
+          export NPM_CONFIG_USERCONFIG="$npmrc"
+          trap 'rm -f "$npmrc"' EXIT
+
+          package_dir="$RUNNER_TEMP/subapp-npm-packages-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          manifest="$package_dir/manifest.json"
+          package_list="$RUNNER_TEMP/subapp-packages-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.tsv"
+          if [ ! -f "$manifest" ]; then
+            echo "Package manifest not found: $manifest"
+            exit 1
+          fi
+
+          export MANIFEST_PATH="$manifest"
+          export PACKAGE_DIR="$package_dir"
+          node --input-type=module - > "$package_list" <<'NODE'
+          import { existsSync, readFileSync } from 'node:fs'
+          import path from 'node:path'
+
+          const expectedCount = Number(process.env.EXPECTED_PACKAGE_COUNT)
+          const manifest = JSON.parse(readFileSync(process.env.MANIFEST_PATH, 'utf8'))
+          if (!Array.isArray(manifest.packages) || manifest.packages.length !== expectedCount) {
+            throw new Error(`Expected ${expectedCount} manifest packages`)
+          }
+
+          for (const entry of manifest.packages) {
+            const values = [entry.name, entry.version, entry.tarball]
+            if (values.some(value => typeof value !== 'string' || !value || /[\t\r\n]/.test(value))) {
+              throw new Error('Manifest contains invalid package metadata')
+            }
+            if (path.basename(entry.tarball) !== entry.tarball) {
+              throw new Error(`Invalid tarball path: ${entry.tarball}`)
+            }
+            if (!existsSync(path.join(process.env.PACKAGE_DIR, entry.tarball))) {
+              throw new Error(`Missing tarball: ${entry.tarball}`)
+            }
+            process.stdout.write(`${entry.name}\t${entry.version}\t${entry.tarball}\n`)
+          }
+          NODE
+
+          package_count=0
+          while IFS=$'\t' read -r package_name package_version tarball_name; do
+            [ -n "$package_name" ] || continue
+            package_count=$((package_count + 1))
+            package_tarball="$package_dir/$tarball_name"
+
+            echo "Package: $package_name@$package_version"
+            if npm view "$package_name@$package_version" version &> /dev/null; then
+              echo "Version $package_version exists on $REGISTRY_2, unpublishing..."
+              retry_with_backoff 3 3 npm unpublish "$package_name@$package_version" --force
+              sleep 5
+            fi
+
+            retry_with_backoff 5 5 npm publish "$package_tarball"
+            retry_with_backoff 5 5 npm view "$package_name@$package_version" version
+          done < "$package_list"
+
+          if [ "$package_count" -ne "$EXPECTED_PACKAGE_COUNT" ]; then
+            echo "Expected $EXPECTED_PACKAGE_COUNT published packages, processed $package_count."
+            exit 1
+          fi
+
+      - name: Notify cache bump for registry 2
+        env:
+          NOTIFY_URL: ${{ secrets.NOTIFY_URL_2 }}
+          NOTIFY_TOKEN: ${{ secrets.NOTIFY_TOKEN_2 }}
+        run: |
+          if [ -z "$NOTIFY_URL" ] || [ -z "$NOTIFY_TOKEN" ]; then
+            echo "NOTIFY_URL_2 or NOTIFY_TOKEN_2 not set, skipping."
+            exit 0
+          fi
+          echo "Sending POST request to $NOTIFY_URL"
+          set +e
+          HTTP_STATUS=$(curl -s -o "$RUNNER_TEMP/notify-response-2.txt" -w "%{http_code}" --max-time 30 \
+            -X POST "$NOTIFY_URL" \
+            -H "Authorization: Bearer $NOTIFY_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{}')
+          CURL_EXIT=$?
+          set -e
+          if [ "$CURL_EXIT" -ne 0 ]; then
+            echo "::warning::Notification (Registry 2) request failed (curl exit code $CURL_EXIT)"
+          elif [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+            echo "Notification (Registry 2) sent successfully (HTTP $HTTP_STATUS)"
+          else
+            echo "::warning::Notification (Registry 2) failed with HTTP status $HTTP_STATUS"
+            cat "$RUNNER_TEMP/notify-response-2.txt" || true
+          fi
+
+  publish-subapp-index:
+    name: Publish subapp index
+    needs: [publish-default, publish-registry2]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          clean: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Generate subapp index
+        run: node scripts/generate-subapp-index.mjs
+
+      - name: Merge and upload subapp index
+        env:
+          SUBAPP_INDEX_URL: ${{ secrets.SUBAPP_INDEX_URL }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          set -euo pipefail
+
+          if [ -z "$SUBAPP_INDEX_URL" ] || [ -z "$R2_ACCOUNT_ID" ] || \
+            [ -z "$R2_BUCKET_NAME" ] || [ -z "$AWS_ACCESS_KEY_ID" ] || \
+            [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+            echo "SUBAPP_INDEX_URL or required R2 secrets are not set."
+            exit 1
+          fi
+
+          remote_index="$RUNNER_TEMP/subapp-index.remote.json"
+          http_status=$(curl --silent --show-error --location \
+            --output "$remote_index" \
+            --write-out "%{http_code}" \
+            "$SUBAPP_INDEX_URL")
+
+          if [ "$http_status" = "404" ]; then
+            echo "No remote subapp-index.json found; uploading the generated index."
+          elif [ "$http_status" -ge 200 ] && [ "$http_status" -lt 300 ]; then
+            REMOTE_INDEX="$remote_index" node --input-type=module -e '
+              import { readFile, writeFile } from "node:fs/promises"
+
+              const remote = JSON.parse(await readFile(process.env.REMOTE_INDEX, "utf8"))
+              const localPath = "dist/subapp-index.json"
+              const local = JSON.parse(await readFile(localPath, "utf8"))
+              const isObject = value => value && typeof value === "object" && !Array.isArray(value)
+
+              if (!isObject(remote) || !isObject(local)) {
+                throw new Error("Remote and local subapp indexes must be JSON objects")
+              }
+
+              await writeFile(localPath, `${JSON.stringify({ ...remote, ...local }, null, 2)}\n`)
+            '
+            echo "Merged local subapp entries into the remote index."
+          else
+            echo "Failed to download subapp-index.json (HTTP $http_status)."
+            exit 1
+          fi
+
+          aws s3 cp dist/subapp-index.json \
+            "s3://$R2_BUCKET_NAME/subapp-index.json" \
+            --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \
+            --content-type "application/json" \
+            --only-show-errors
