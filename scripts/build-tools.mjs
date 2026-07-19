@@ -181,9 +181,26 @@ async function runPackageScriptWithArgs(project, scriptName, args = []) {
 function rewriteDistPackageJson(project) {
   const packageJson = project.packageJson;
   const runtimeDependencies = getRuntimeDependencies(project);
+  const minimumNodeMajor = runtimeDependencies.serialport ? 20 : 18;
+  const runtimeScripts = Object.fromEntries(
+    Object.entries(packageJson.scripts || {}).filter(([, command]) => (
+      typeof command === 'string' && /^node\s+(?:\.\/)?index\.js(?:\s|$)/.test(command.trim())
+    ))
+  );
   const next = {
-    ...packageJson,
-    main: 'index.js'
+    name: packageJson.name,
+    version: packageJson.version,
+    description: packageJson.description,
+    main: 'index.js',
+    bin: packageJson.bin,
+    files: ['index.js', 'ui', 'i18n', 'assets', 'skill', 'vendor'],
+    scripts: runtimeScripts,
+    ...(packageJson.name?.startsWith('@')
+      ? { publishConfig: { access: 'restricted' } }
+      : {}),
+    engines: {
+      node: `>=${minimumNodeMajor}`
+    }
   };
 
   if (typeof packageJson.bin === 'string') {
@@ -194,14 +211,8 @@ function rewriteDistPackageJson(project) {
     );
   }
 
-  delete next.devDependencies;
-  delete next.peerDependencies;
-  delete next.optionalDependencies;
-
   if (Object.keys(runtimeDependencies).length) {
     next.dependencies = runtimeDependencies;
-  } else {
-    delete next.dependencies;
   }
 
   return next;
