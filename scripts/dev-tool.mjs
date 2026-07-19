@@ -10,8 +10,12 @@ import { fileURLToPath } from 'node:url';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ignoredDirectoryNames = new Set([
+  '.angular',
   '.git',
   '.cache',
+  '.parcel-cache',
+  '.turbo',
+  '.vite',
   'coverage',
   'dist',
   'build',
@@ -346,6 +350,8 @@ function classifyChange(toolDir, filePath) {
   return '';
 }
 
+export { classifyChange };
+
 function createToolWatcher(toolDir, onChange) {
   const watchers = new Map();
   let closed = false;
@@ -426,6 +432,7 @@ async function main() {
   let debounceTimer = null;
   let pendingChangeKind = '';
   let pendingFiles = new Set();
+  let changeFlushPromise = null;
 
   function childEnv() {
     return {
@@ -544,30 +551,45 @@ async function main() {
     }
   }
 
-  async function flushChanges() {
-    const changeKind = pendingChangeKind;
-    const files = pendingFiles;
-    pendingChangeKind = '';
-    pendingFiles = new Set();
+  function flushChanges() {
+    if (changeFlushPromise) return changeFlushPromise;
 
-    if (!changeKind) return;
-    if (changeKind === 'backend') {
-      await restartChild(files).catch(error => {
-        console.error(`[dev] restart failed: ${error.message}`);
-      });
-      return;
-    }
+    changeFlushPromise = (async () => {
+      while (pendingChangeKind) {
+        const changeKind = pendingChangeKind;
+        const files = pendingFiles;
+        pendingChangeKind = '';
+        pendingFiles = new Set();
 
-    console.log(`[dev] frontend changed: ${Array.from(files).slice(0, 4).join(', ')}`);
-    if (Array.from(files).some(file => file.startsWith('ui/') || file.startsWith('scripts/'))) {
-      await runToolScriptIfPresent(tool.dir, 'build:ui').catch(error => {
-        console.error(`[dev] build:ui failed: ${error.message}`);
-      });
-    }
-    reloadServer.broadcast('reload', {
-      reason: 'frontend',
-      time: Date.now()
+        if (changeKind === 'backend') {
+          await restartChild(files).catch(error => {
+            console.error(`[dev] restart failed: ${error.message}`);
+          });
+          continue;
+        }
+
+        console.log(`[dev] frontend changed: ${Array.from(files).slice(0, 4).join(', ')}`);
+        const requiresBuild = Array.from(files)
+          .some(file => file.startsWith('ui/') || file.startsWith('scripts/'));
+        if (requiresBuild) {
+          try {
+            await runToolScriptIfPresent(tool.dir, 'build:ui');
+          } catch (error) {
+            console.error(`[dev] build:ui failed: ${error.message}`);
+            continue;
+          }
+        }
+        reloadServer.broadcast('reload', {
+          reason: 'frontend',
+          time: Date.now()
+        });
+      }
+    })().finally(() => {
+      changeFlushPromise = null;
+      if (pendingChangeKind && !shuttingDown) void flushChanges();
     });
+
+    return changeFlushPromise;
   }
 
   function scheduleChange(filePath) {
@@ -620,7 +642,12 @@ async function main() {
   console.log('[dev] watching ui/i18n for reload and backend files for restart');
 }
 
-main().catch(error => {
-  console.error(`[dev] ${error.message}`);
-  process.exit(1);
-});
+const isMainModule = process.argv[1]
+  && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isMainModule) {
+  main().catch(error => {
+    console.error(`[dev] ${error.message}`);
+    process.exit(1);
+  });
+}

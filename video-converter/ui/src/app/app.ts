@@ -61,19 +61,6 @@ interface RpcEventMessage {
   data?: Record<string, unknown>;
 }
 
-interface SaveFileWritable {
-  write(data: Blob): Promise<void>;
-  close(): Promise<void>;
-}
-
-interface SaveFileHandle {
-  createWritable(): Promise<SaveFileWritable>;
-}
-
-interface SavePickerWindow {
-  showSaveFilePicker?: (options: Record<string, unknown>) => Promise<SaveFileHandle>;
-}
-
 declare global {
   interface Window {
     Penpal?: PenpalApi;
@@ -116,8 +103,7 @@ export class App implements OnInit, OnDestroy {
 
   width = 240;
   height = 240;
-  fpsNumerator = 15;
-  fpsDenominator = 1;
+  fps = 15;
   maxFrames = 300;
   pixelFormat: AilyPixelFormat = 'rgb565';
   loop = true;
@@ -160,10 +146,6 @@ export class App implements OnInit, OnDestroy {
 
   get sourceIsVideo(): boolean {
     return !!this.sourceFile && this.isMp4(this.sourceFile);
-  }
-
-  get fpsValue(): number {
-    return this.fpsDenominator > 0 ? this.fpsNumerator / this.fpsDenominator : 0;
   }
 
   get frameSize(): number {
@@ -277,9 +259,8 @@ export class App implements OnInit, OnDestroy {
     this.onSettingsChange();
   }
 
-  setFps(numerator: number, denominator: number): void {
-    this.fpsNumerator = numerator;
-    this.fpsDenominator = denominator;
+  setFps(fps: number): void {
+    this.fps = fps;
     this.onSettingsChange();
   }
 
@@ -317,8 +298,7 @@ export class App implements OnInit, OnDestroy {
         buffer,
         width: Math.round(this.width),
         height: Math.round(this.height),
-        fpsNumerator: Math.round(this.fpsNumerator),
-        fpsDenominator: Math.round(this.fpsDenominator),
+        fps: this.fps,
         maxFrames: Math.round(this.maxFrames),
         pixelFormat: this.pixelFormat,
         loop: this.loop,
@@ -363,25 +343,14 @@ export class App implements OnInit, OnDestroy {
     this.renderCurrentFrame();
   }
 
-  async exportFile(): Promise<void> {
+  exportFile(): void {
     if (!this.result) return;
     const blob = new Blob([this.result.fileBuffer], { type: 'application/octet-stream' });
-
-    try {
-      const saved = await this.saveBlobWithPicker(blob, this.suggestedFileName);
-      if (!saved) this.downloadBlobWithAnchor(blob, this.suggestedFileName);
-      this.showNotice(
-        'success',
-        this.t('EXPORT_SUCCESS', 'Exported {name}', { name: this.suggestedFileName }),
-      );
-    } catch (error) {
-      if (this.isAbortError(error)) return;
-      this.downloadBlobWithAnchor(blob, this.suggestedFileName);
-      this.showNotice(
-        'success',
-        this.t('EXPORT_SUCCESS', 'Exported {name}', { name: this.suggestedFileName }),
-      );
-    }
+    this.downloadBlobWithAnchor(blob, this.suggestedFileName);
+    this.showNotice(
+      'success',
+      this.t('EXPORT_SUCCESS', 'Exported {name}', { name: this.suggestedFileName }),
+    );
   }
 
   formatBytes(bytes: number): string {
@@ -500,14 +469,8 @@ export class App implements OnInit, OnDestroy {
     if (!Number.isInteger(this.height) || this.height < 1 || this.height > MAX_DIMENSION) {
       return this.t('ERROR_HEIGHT_RANGE', 'Height must be an integer from 1 to {max}', { max: MAX_DIMENSION });
     }
-    if (!Number.isInteger(this.fpsNumerator) || this.fpsNumerator < 1 || this.fpsNumerator > 0xffff_ffff) {
-      return this.t('ERROR_FPS_NUMERATOR', 'FPS numerator must be a positive integer');
-    }
-    if (!Number.isInteger(this.fpsDenominator) || this.fpsDenominator < 1 || this.fpsDenominator > 0xffff_ffff) {
-      return this.t('ERROR_FPS_DENOMINATOR', 'FPS denominator must be a positive integer');
-    }
-    if (!Number.isFinite(this.fpsValue) || this.fpsValue <= 0 || this.fpsValue > MAX_FPS) {
-      return this.t('ERROR_FPS_LIMIT', 'Target FPS cannot exceed {max}', { max: MAX_FPS });
+    if (!Number.isFinite(this.fps) || this.fps < 0.001 || this.fps > MAX_FPS) {
+      return this.t('ERROR_FPS_RANGE', 'FPS must be between 0.001 and {max}', { max: MAX_FPS });
     }
     if (!Number.isInteger(this.maxFrames) || this.maxFrames < 1 || this.maxFrames > MAX_FRAMES) {
       return this.t('ERROR_FRAME_LIMIT', 'Maximum frames must be an integer from 1 to {max}', { max: MAX_FRAMES });
@@ -663,23 +626,6 @@ export class App implements OnInit, OnDestroy {
     this.sourceUrl = '';
   }
 
-  private async saveBlobWithPicker(blob: Blob, fileName: string): Promise<boolean> {
-    const picker = (window as unknown as SavePickerWindow).showSaveFilePicker;
-    if (typeof picker !== 'function') return false;
-    const extension = this.outputExtension;
-    const handle = await picker.call(window, {
-      suggestedName: fileName,
-      types: [{
-        description: this.t('AILY_FILE', 'AILY frame file'),
-        accept: { 'application/octet-stream': [extension] },
-      }],
-    });
-    const writable = await handle.createWritable();
-    await writable.write(blob);
-    await writable.close();
-    return true;
-  }
-
   private downloadBlobWithAnchor(blob: Blob, fileName: string): void {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -697,10 +643,6 @@ export class App implements OnInit, OnDestroy {
 
   private isMp4(file: File): boolean {
     return file.type.toLowerCase().includes('mp4') || /\.mp4$/i.test(file.name);
-  }
-
-  private isAbortError(error: unknown): boolean {
-    return error instanceof DOMException && error.name === 'AbortError';
   }
 
   private errorMessage(error: unknown): string {
@@ -745,8 +687,7 @@ export class App implements OnInit, OnDestroy {
       localStorage.setItem(DRAFT_KEY, JSON.stringify({
         width: this.width,
         height: this.height,
-        fpsNumerator: this.fpsNumerator,
-        fpsDenominator: this.fpsDenominator,
+        fps: this.fps,
         maxFrames: this.maxFrames,
         pixelFormat: this.pixelFormat,
         loop: this.loop,
@@ -765,8 +706,13 @@ export class App implements OnInit, OnDestroy {
       if (!draft || typeof draft !== 'object') return;
       if (typeof draft['width'] === 'number') this.width = draft['width'];
       if (typeof draft['height'] === 'number') this.height = draft['height'];
-      if (typeof draft['fpsNumerator'] === 'number') this.fpsNumerator = draft['fpsNumerator'];
-      if (typeof draft['fpsDenominator'] === 'number') this.fpsDenominator = draft['fpsDenominator'];
+      if (typeof draft['fps'] === 'number') {
+        this.fps = draft['fps'];
+      } else if (typeof draft['fpsNumerator'] === 'number'
+        && typeof draft['fpsDenominator'] === 'number'
+        && draft['fpsDenominator'] > 0) {
+        this.fps = draft['fpsNumerator'] / draft['fpsDenominator'];
+      }
       if (typeof draft['maxFrames'] === 'number') this.maxFrames = draft['maxFrames'];
       if (draft['pixelFormat'] === 'mono' || draft['pixelFormat'] === 'rgb565' || draft['pixelFormat'] === 'rgb332') {
         this.pixelFormat = draft['pixelFormat'];

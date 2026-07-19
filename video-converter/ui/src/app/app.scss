@@ -217,32 +217,6 @@ input[type='number'] {
   }
 }
 
-.fps-row {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 10px minmax(0, 1fr);
-  align-items: end;
-  gap: 5px;
-  padding-bottom: 21px;
-  margin-top: 9px;
-}
-
-.fraction-line {
-  display: flex;
-  height: 30px;
-  align-items: center;
-  justify-content: center;
-  color: var(--muted);
-}
-
-.fps-result {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  color: var(--muted);
-  font-size: 10px;
-}
-
 .full-input {
   display: block;
   margin-top: 9px;

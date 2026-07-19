@@ -8,8 +8,7 @@ export interface VideoConversionRequest {
   buffer: ArrayBuffer;
   width: number;
   height: number;
-  fpsNumerator: number;
-  fpsDenominator: number;
+  fps: number;
   maxFrames: number;
   pixelFormat: AilyPixelFormat;
   loop: boolean;

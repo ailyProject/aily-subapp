@@ -23,7 +23,8 @@ import {
 const MICROSECONDS_PER_SECOND = 1_000_000;
 const MAX_DIMENSION = 4096;
 const MAX_FRAMES = 10_000;
-const MAX_UINT32 = 0xffff_ffff;
+const MAX_FPS = 240;
+const FPS_PRECISION = 1000;
 const MAX_OUTPUT_BYTES = 256 * 1024 * 1024;
 const VIDEO_DECODE_MAX_QUEUE_SIZE = 64;
 const VIDEO_DECODE_QUEUE_POLL_MS = 10;
@@ -184,11 +185,29 @@ function normalizeMonoOptions(options: MonoConversionOptions | null | undefined)
   };
 }
 
+function greatestCommonDivisor(a: number, b: number): number {
+  while (b !== 0) {
+    [a, b] = [b, a % b];
+  }
+  return a;
+}
+
+function fpsToFraction(value: number): { numerator: number; denominator: number } {
+  if (!Number.isFinite(value) || value < 0.001 || value > MAX_FPS) {
+    throw new VideoConversionError('INVALID_REQUEST', `FPS must be between 0.001 and ${MAX_FPS}`);
+  }
+  const scaled = Math.round(value * FPS_PRECISION);
+  const divisor = greatestCommonDivisor(scaled, FPS_PRECISION);
+  return {
+    numerator: scaled / divisor,
+    denominator: FPS_PRECISION / divisor,
+  };
+}
+
 function normalizeConversionOptions(request: VideoConversionRequest): ConversionOptions {
   const width = validateInteger(request.width, 1, MAX_DIMENSION, '宽度');
   const height = validateInteger(request.height, 1, MAX_DIMENSION, '高度');
-  const fpsNumerator = validateInteger(request.fpsNumerator, 1, MAX_UINT32, 'FPS 分子');
-  const fpsDenominator = validateInteger(request.fpsDenominator, 1, MAX_UINT32, 'FPS 分母');
+  const { numerator: fpsNumerator, denominator: fpsDenominator } = fpsToFraction(request.fps);
   const requestedMaxFrames = validateInteger(request.maxFrames, 1, MAX_FRAMES, '最大帧数');
 
   if (request.pixelFormat !== 'mono'
