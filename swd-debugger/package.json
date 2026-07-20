@@ -3,6 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "description": "probe-rs SWD debugger backend for Aily Blockly",
+  "ailySubapp": {
+    "app": {
+      "icon": "fa-light fa-microchip",
+      "enabled": true
+    }
+  },
   "main": "index.js",
   "bin": {
     "aily-swd-debugger": "index.js"

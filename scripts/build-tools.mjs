@@ -191,6 +191,9 @@ function rewriteDistPackageJson(project) {
     name: packageJson.name,
     version: packageJson.version,
     description: packageJson.description,
+    ...(packageJson.ailySubapp && typeof packageJson.ailySubapp === 'object'
+      ? { ailySubapp: packageJson.ailySubapp }
+      : {}),
     main: 'index.js',
     bin: packageJson.bin,
     files: ['index.js', 'ui', 'i18n', 'assets', 'skill', 'vendor'],

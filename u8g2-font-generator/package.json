@@ -3,6 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "description": "Generate U8g2 font source files from local fonts",
+  "ailySubapp": {
+    "app": {
+      "icon": "fa-light fa-font",
+      "enabled": true
+    }
+  },
   "main": "index.js",
   "bin": {
     "aily-u8g2-font-generator": "index.js"

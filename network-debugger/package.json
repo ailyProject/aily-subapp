@@ -3,6 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "description": "Network debugger backend for Aily Blockly",
+  "ailySubapp": {
+    "app": {
+      "icon": "fa-light fa-network-wired",
+      "enabled": true
+    }
+  },
   "main": "index.js",
   "bin": {
     "aily-network-debugger": "index.js"

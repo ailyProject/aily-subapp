@@ -3,6 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "description": "Serial debugger child tool backend for Aily Blockly",
+  "ailySubapp": {
+    "app": {
+      "icon": "fa-light fa-monitor-waveform",
+      "enabled": true
+    }
+  },
   "main": "index.js",
   "bin": {
     "aily-serial-debugger": "index.js"

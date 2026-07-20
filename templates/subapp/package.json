@@ -3,6 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "description": "{{tool-description}} backend for Aily Blockly",
+  "ailySubapp": {
+    "app": {
+      "icon": "fa-light fa-puzzle-piece",
+      "enabled": true
+    }
+  },
   "main": "index.js",
   "bin": {
     "aily-{{tool-id}}": "index.js"

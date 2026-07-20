@@ -3,6 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "description": "FFS manager child tool backend for Aily Blockly",
+  "ailySubapp": {
+    "app": {
+      "icon": "fa-light fa-database",
+      "enabled": true
+    }
+  },
   "main": "index.js",
   "bin": {
     "aily-ffs-manager": "index.js"

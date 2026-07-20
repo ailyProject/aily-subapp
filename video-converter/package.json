@@ -3,6 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "description": "Convert JPG, PNG, WebP, GIF and MP4 media into AILY display frame files",
+  "ailySubapp": {
+    "app": {
+      "icon": "fa-light fa-photo-film",
+      "enabled": true
+    }
+  },
   "main": "index.js",
   "bin": {
     "aily-video-converter": "index.js"
