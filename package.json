@@ -13,6 +13,8 @@
     "dev:u8g2-font": "node scripts/dev-tool.mjs u8g2-font-generator",
     "dev:video": "node scripts/dev-tool.mjs video-converter",
     "test:dev-tool": "node --test scripts/dev-tool.test.mjs",
+    "dev:link": "node scripts/link-dev.mjs",
+    "dev:unlink": "node scripts/link-dev.mjs --unlink",
     "build": "node scripts/build-tools.mjs",
     "build:swd": "node scripts/build-tools.mjs swd-debugger",
     "build:u8g2-font": "node scripts/build-tools.mjs u8g2-font-generator",

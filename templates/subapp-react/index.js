@@ -2,9 +2,9 @@
 'use strict';
 
 const readline = require('readline');
-const { asError, createMqttDebuggerCore } = require('./core');
+const { asError, createToolCore } = require('./core');
 const { parseCliArgs, requestedCommandFromArgs, runCli } = require('./cli');
-const { startMqttDebuggerServer } = require('./server');
+const { startToolServer } = require('./server');
 
 const cliArgs = process.argv.slice(2);
 const requestedCommand = requestedCommandFromArgs(cliArgs);
@@ -22,7 +22,7 @@ function startRpcServer() {
   let core;
 
   try {
-    core = createMqttDebuggerCore({ sendEvent });
+    core = createToolCore({ sendEvent });
   } catch (error) {
     sendEvent('fatal', { message: asError(error) });
     process.exit(1);
@@ -113,7 +113,7 @@ async function startServeMode(rawArgs) {
   });
 
   try {
-    serverHandle = await startMqttDebuggerServer({
+    serverHandle = await startToolServer({
       host: options.host || '127.0.0.1',
       port: options.port === undefined ? 0 : Number(options.port),
       token: options.token
@@ -143,7 +143,7 @@ if (requestedCommand === 'rpc' || requestedCommand === 'server') {
   void startServeMode(cliArgs.slice(1));
 } else {
   void runCli(requestedCommand, cliArgs.slice(1), {
-    createCore: () => createMqttDebuggerCore(),
+    createCore: () => createToolCore(),
     stdout: process.stdout
   }).then(code => process.exit(code));
 }

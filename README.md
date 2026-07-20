@@ -2,7 +2,30 @@
 
 这个仓库用于维护 Aily Blockly 可加载的独立子应用工具。这里的“子应用”是一个独立 Node 项目：它自己启动本地 HTTP/WebSocket 服务，浏览器 UI 由 Aily Blockly 通过 iframe 加载，核心能力可以同时提供给 UI、CLI 和 AI 自动化流程。
 
-最新外部子应用开发提示词见 [subapp-development.md](subapp-development.md)，工程细节规范见 [tool-development-spec.md](tool-development-spec.md)。可复制模板见 [templates/subapp](templates/subapp)、[templates/subapp-angular](templates/subapp-angular)、[templates/subapp-vue](templates/subapp-vue)，现有工具和模板说明见 [subapp-development-template.md](subapp-development-template.md)。
+最新外部子应用开发提示词见 [subapp-development.md](subapp-development.md)，工程细节规范见 [tool-development-spec.md](tool-development-spec.md)。可复制模板见 [templates/subapp](templates/subapp)、[templates/subapp-angular](templates/subapp-angular)、[templates/subapp-vue](templates/subapp-vue)、[templates/subapp-react](templates/subapp-react)，现有工具和模板说明见 [subapp-development-template.md](subapp-development-template.md)。
+
+## 链接到 Aily Blockly 开发环境
+
+主软件开发态不再克隆 `aily-subapp`，也不扫描 `child/tools`。在本源码仓库直接安装、
+准备 UI 并将包链接到主软件使用的用户级 npm 子应用目录：
+
+```bash
+# 链接全部子应用
+npm run dev:link
+
+# 只链接指定子应用
+npm run dev:link -- mqtt-debugger serial-debugger
+
+# 移除全部或指定链接
+npm run dev:unlink
+npm run dev:unlink -- mqtt-debugger
+```
+
+默认目标是 `${AILY_APPDATA_PATH}/npm-global/app`；没有设置 `AILY_APPDATA_PATH` 时，
+macOS 使用 `~/Library/aily-project/npm-global/app`。可通过
+`AILY_SUBAPP_INSTALL_ROOT` 或 `--app-root <path>` 覆盖。链接指向源码包，后端改动在
+主软件中重启对应子应用后生效；静态 UI 文件刷新后生效。如果目标目录已有正式安装包，
+`dev:link` 会先就地备份，`dev:unlink` 时自动恢复，并且不会重新安装其他子应用依赖。
 
 ## 什么时候做子应用
 
@@ -57,6 +80,7 @@ Copy-Item -Recurse templates/subapp sensor-debugger
 - `templates/subapp`: 纯 HTML/CSS/JS UI，适合轻量工具。
 - `templates/subapp-angular`: Angular UI，结构参考 `serial-debugger/ui`，需要额外安装 `sensor-debugger/ui` 依赖。
 - `templates/subapp-vue`: Vue/Vite UI，需要额外安装 `sensor-debugger/ui` 依赖。
+- `templates/subapp-react`: React/Vite UI，内置类型安全的宿主控制面、WebSocket RPC、主题/i18n 和草稿生命周期。
 
 复制后先替换模板占位符：
 

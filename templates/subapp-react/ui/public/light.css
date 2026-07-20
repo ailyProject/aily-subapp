@@ -1,0 +1,17 @@
+:root,
+html[data-theme="light"] {
+  color-scheme: light;
+  --bg: #e8e8e8;
+  --panel: #f3f4f6;
+  --panel-soft: #e1e5ea;
+  --text: #252a31;
+  --muted: #5d6673;
+  --border: rgba(31, 41, 55, 0.15);
+  --primary: #0078d4;
+  --primary-strong: #005fb8;
+  --primary-soft: rgba(0, 120, 212, 0.13);
+  --ok: #237a20;
+  --danger: #c62828;
+  --control-hover: rgba(31, 41, 55, 0.09);
+  --scrollbar-thumb: rgba(31, 41, 55, 0.32);
+}
