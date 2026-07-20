@@ -1,0 +1,8 @@
+---
+description: Aily 子应用 Debugger UI 视觉规范与响应式适配标准（以 mqtt-debugger 为基准）
+globs: **/*-debugger/ui/**,**/ffs-manager/ui/**
+alwaysApply: false
+---
+
+# UI 规范经验优先读取 subapp-development-ui.md 文档
+

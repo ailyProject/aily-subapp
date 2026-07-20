@@ -9,6 +9,8 @@
     "dev:mqtt": "node scripts/dev-tool.mjs mqtt-debugger",
     "dev:network": "node scripts/dev-tool.mjs network-debugger",
     "dev:serial": "node scripts/dev-tool.mjs serial-debugger",
+    "dev:link": "node scripts/link-dev.mjs",
+    "dev:unlink": "node scripts/link-dev.mjs --unlink",
     "build": "node scripts/build-tools.mjs",
     "build:tools": "node scripts/build-tools.mjs"
   },

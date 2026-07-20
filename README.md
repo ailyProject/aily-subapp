@@ -4,6 +4,29 @@
 
 最新外部子应用开发提示词见 [subapp-development.md](subapp-development.md)，工程细节规范见 [tool-development-spec.md](tool-development-spec.md)。可复制模板见 [templates/subapp](templates/subapp)、[templates/subapp-angular](templates/subapp-angular)、[templates/subapp-vue](templates/subapp-vue)、[templates/subapp-react](templates/subapp-react)，现有工具和模板说明见 [subapp-development-template.md](subapp-development-template.md)。
 
+## 链接到 Aily Blockly 开发环境
+
+主软件开发态不再克隆 `aily-subapp`，也不扫描 `child/tools`。在本源码仓库直接安装、
+准备 UI 并将包链接到主软件使用的用户级 npm 子应用目录：
+
+```bash
+# 链接全部子应用
+npm run dev:link
+
+# 只链接指定子应用
+npm run dev:link -- mqtt-debugger serial-debugger
+
+# 移除全部或指定链接
+npm run dev:unlink
+npm run dev:unlink -- mqtt-debugger
+```
+
+默认目标是 `${AILY_APPDATA_PATH}/npm-global/app`；没有设置 `AILY_APPDATA_PATH` 时，
+macOS 使用 `~/Library/aily-project/npm-global/app`。可通过
+`AILY_SUBAPP_INSTALL_ROOT` 或 `--app-root <path>` 覆盖。链接指向源码包，后端改动在
+主软件中重启对应子应用后生效；静态 UI 文件刷新后生效。如果目标目录已有正式安装包，
+`dev:link` 会先就地备份，`dev:unlink` 时自动恢复，并且不会重新安装其他子应用依赖。
+
 ## 什么时候做子应用
 
 适合做 child 独立子应用的工具：
