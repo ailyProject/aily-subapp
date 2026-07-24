@@ -56,6 +56,14 @@
     "PORTS_FAILED": "Ports konnten nicht aktualisiert werden",
     "SELECT_PORT_FIRST": "Bitte zuerst einen seriellen Port auswählen",
     "SEND_FAILED": "Senden fehlgeschlagen",
-    "SIGNAL_FAILED": "Signal fehlgeschlagen"
+    "SIGNAL_FAILED": "Signal fehlgeschlagen",
+    "AGENT_CANCELLED": "Agent-Vorgang abgebrochen",
+    "JOURNAL_RECORDING": "Journal-Aufzeichnung",
+    "SCENARIO_RUNNING": "Szenario läuft",
+    "SCENARIO_COMPLETED": "Szenario abgeschlossen",
+    "ANALYSIS_RUNNING": "Analyse läuft",
+    "ANALYSIS_COMPLETED": "Analyse abgeschlossen",
+    "JOURNAL_SEARCH": "Journal durchsuchen",
+    "JOURNAL_SEARCH_EMPTY": "Keine gespeicherten Treffer"
   }
 }

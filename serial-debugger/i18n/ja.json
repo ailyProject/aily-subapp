@@ -56,6 +56,14 @@
     "PORTS_FAILED": "ポート更新に失敗しました",
     "SELECT_PORT_FIRST": "先にシリアルポートを選択してください",
     "SEND_FAILED": "送信に失敗しました",
-    "SIGNAL_FAILED": "信号操作に失敗しました"
+    "SIGNAL_FAILED": "信号操作に失敗しました",
+    "AGENT_CANCELLED": "エージェント操作がキャンセルされました",
+    "JOURNAL_RECORDING": "ジャーナル記録中",
+    "SCENARIO_RUNNING": "シナリオ実行中",
+    "SCENARIO_COMPLETED": "シナリオ完了",
+    "ANALYSIS_RUNNING": "解析中",
+    "ANALYSIS_COMPLETED": "解析完了",
+    "JOURNAL_SEARCH": "ジャーナルを検索",
+    "JOURNAL_SEARCH_EMPTY": "保存済みログに一致なし"
   }
 }

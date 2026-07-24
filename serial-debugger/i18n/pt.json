@@ -56,6 +56,14 @@
     "PORTS_FAILED": "Falha ao atualizar portas",
     "SELECT_PORT_FIRST": "Selecione primeiro uma porta serial",
     "SEND_FAILED": "Falha ao enviar",
-    "SIGNAL_FAILED": "Falha no sinal"
+    "SIGNAL_FAILED": "Falha no sinal",
+    "AGENT_CANCELLED": "Operação do agente cancelada",
+    "JOURNAL_RECORDING": "Gravação do journal",
+    "SCENARIO_RUNNING": "Cenário em execução",
+    "SCENARIO_COMPLETED": "Cenário concluído",
+    "ANALYSIS_RUNNING": "Análise em execução",
+    "ANALYSIS_COMPLETED": "Análise concluída",
+    "JOURNAL_SEARCH": "Pesquisar no journal",
+    "JOURNAL_SEARCH_EMPTY": "Nenhuma correspondência persistida"
   }
 }

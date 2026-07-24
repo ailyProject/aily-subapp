@@ -56,6 +56,14 @@
     "PORTS_FAILED": "No se pudieron actualizar los puertos",
     "SELECT_PORT_FIRST": "Selecciona primero un puerto serie",
     "SEND_FAILED": "Error al enviar",
-    "SIGNAL_FAILED": "Error de señal"
+    "SIGNAL_FAILED": "Error de señal",
+    "AGENT_CANCELLED": "Operación del agente cancelada",
+    "JOURNAL_RECORDING": "Registro del journal",
+    "SCENARIO_RUNNING": "Escenario en ejecución",
+    "SCENARIO_COMPLETED": "Escenario completado",
+    "ANALYSIS_RUNNING": "Análisis en ejecución",
+    "ANALYSIS_COMPLETED": "Análisis completado",
+    "JOURNAL_SEARCH": "Buscar en el journal",
+    "JOURNAL_SEARCH_EMPTY": "No hay coincidencias persistidas"
   }
 }

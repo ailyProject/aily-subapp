@@ -57,6 +57,35 @@
     "PORTS_FAILED": "重新整理串口失敗",
     "SELECT_PORT_FIRST": "請先選擇串口",
     "SEND_FAILED": "傳送失敗",
-    "SIGNAL_FAILED": "訊號切換失敗"
+    "SIGNAL_FAILED": "訊號切換失敗",
+    "AGENT_CONTROLLED": "Agent 正在控制",
+    "AGENT_WAITING": "Agent 正在等待",
+    "AGENT_MATCHED": "Agent 已配對回應",
+    "AGENT_STEP_FAILED": "Agent 串口事務失敗",
+    "AGENT_CANCELLED": "Agent 操作已取消",
+    "SERIAL_RESPONSE": "串口回應",
+    "RUNTIME_RESTARTED": "串口執行環境已重新啟動",
+    "JOURNAL_RECORDING": "日誌持久記錄中",
+    "SCENARIO_RUNNING": "場景執行中",
+    "SCENARIO_COMPLETED": "場景已完成",
+    "ANALYSIS_RUNNING": "分析執行中",
+    "ANALYSIS_COMPLETED": "分析已完成",
+    "JOURNAL_SEARCH": "搜尋持久日誌",
+    "JOURNAL_SEARCH_EMPTY": "持久日誌中沒有配對項目"
+    ,"SCENARIO_PAUSE": "暫停"
+    ,"SCENARIO_PAUSING": "正在等待安全邊界"
+    ,"SCENARIO_PAUSED": "場景已暫停"
+    ,"SCENARIO_RESUME": "恢復"
+    ,"SCENARIO_RESUMED": "場景已恢復"
+    ,"SCENARIO_TAKEOVER": "手動接管"
+    ,"SCENARIO_TAKEOVER_PENDING": "等待手動接管"
+    ,"SCENARIO_TAKEN_OVER": "已取得手動控制"
+    ,"SCENARIO_TAKEN_OVER_OTHER": "其他用戶端正在控制"
+    ,"SCENARIO_RELEASE": "釋放"
+    ,"SCENARIO_TAKEOVER_RELEASED": "已釋放手動控制"
+    ,"SCENARIO_CANCEL": "取消"
+    ,"SCENARIO_CANCELLING": "正在取消"
+    ,"SCENARIO_CONTROL_REQUIRED": "請先接管活動場景，再執行手動串口操作"
+    ,"SCENARIO_CONTROL_FAILED": "場景控制失敗"
   }
 }

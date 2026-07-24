@@ -1,0 +1,123 @@
+<main class="compact-serial">
+  <header class="compact-header">
+    <div class="compact-title-row">
+      <span
+        class="connection-dot"
+        [class.is-ready]="store.connected()"
+        [class.is-connecting]="store.connectionState() === 'connecting' || store.busy()"
+        [class.is-error]="store.connectionState() === 'error'"></span>
+      <strong>{{ connectionLabel }}</strong>
+      @if (store.agentControlled()) {
+        <span class="status-chip is-agent">
+          <span class="pulse"></span>
+          {{ t('AGENT_CONTROLLED', 'Agent controlled') }}
+        </span>
+      }
+      @if (store.analysisRunning()) {
+        <span class="status-chip is-analysis">
+          <span class="pulse"></span>
+          {{ t('ANALYSIS_RUNNING', 'Analysis running') }}
+        </span>
+      } @else if (store.scenarioActive()) {
+        <span class="status-chip is-analysis" [title]="store.scenarioName()">
+          <span class="pulse"></span>
+          {{ t('SCENARIO_RUNNING', 'Scenario running') }}
+        </span>
+      }
+      @if (store.journalEnabled()) {
+        <span
+          class="status-chip is-recording"
+          [class.is-warning]="store.journalState() !== 'ok'">
+          <span class="pulse"></span>
+          {{ t('JOURNAL_RECORDING', 'Journal recording') }}
+        </span>
+      }
+    </div>
+
+    <div class="compact-controls">
+      <label class="compact-field is-port">
+        <span>{{ t('PORT', 'Port') }}</span>
+        <select
+          [(ngModel)]="selectedPort"
+          [disabled]="controlsDisabled || store.connected()">
+          <option value="">{{ t('SELECT_PORT', 'Select port') }}</option>
+          @for (port of ports; track port.path) {
+            <option [value]="port.path">{{ portLabel(port) }}</option>
+          }
+        </select>
+      </label>
+
+      <button
+        type="button"
+        class="refresh-button"
+        [title]="t('REFRESH_PORTS', 'Refresh ports')"
+        [disabled]="store.connectionState() !== 'ready' || store.busy()"
+        (click)="refreshPorts()">
+        ↻
+      </button>
+
+      <label class="compact-field is-baud">
+        <span>{{ t('BAUD_RATE', 'Baud Rate') }}</span>
+        <select
+          [(ngModel)]="selectedBaudRate"
+          [disabled]="controlsDisabled || store.connected()">
+          @for (baudRate of baudRates; track baudRate) {
+            <option [ngValue]="baudRate">{{ baudRate }}</option>
+          }
+        </select>
+      </label>
+
+      <button
+        type="button"
+        class="connect-button"
+        [class.is-connected]="store.connected()"
+        [disabled]="controlsDisabled"
+        (click)="toggleConnection()">
+        {{ store.connected() ? t('DISCONNECT', 'Disconnect') : t('CONNECT', 'Connect') }}
+      </button>
+    </div>
+
+    <div class="compact-metrics">
+      <span>RX {{ formatBytes(store.rxBytes()) }}</span>
+      <span>TX {{ formatBytes(store.txBytes()) }}</span>
+      @if (store.connected()) {
+        <span class="port-path" [title]="store.portPath()">
+          {{ store.portPath() }} · {{ store.baudRate() }}
+        </span>
+      }
+    </div>
+  </header>
+
+  @if (operationError || store.connectionError()) {
+    <div class="compact-error" role="alert">
+      {{ operationError || store.connectionError() }}
+    </div>
+  }
+
+  @if (store.historyTruncated()) {
+    <div class="tail-notice">
+      Showing the latest bounded Runtime tail; full history remains in the Journal.
+    </div>
+  }
+
+  <section class="compact-log sscroll" #compactLog>
+    @if (!logs.length) {
+      <div class="compact-empty">{{ t('EMPTY_LOG', 'Serial traffic will appear here') }}</div>
+    }
+    @for (item of logs; track trackLog($index, item)) {
+      <article
+        class="compact-log-row"
+        [class.is-rx]="item.direction === 'RX'"
+        [class.is-tx]="item.direction === 'TX'"
+        [class.is-sys]="item.direction === 'SYS'"
+        [class.is-error]="item.error">
+        <time>{{ formatTime(item.timestamp) }}</time>
+        <span class="direction">{{ item.direction }}</span>
+        @if (item.actor === 'agent') {
+          <span class="agent-mark">AGENT</span>
+        }
+        <pre>{{ item.text }}</pre>
+      </article>
+    }
+  </section>
+</main>

@@ -56,6 +56,14 @@
     "PORTS_FAILED": "Échec de l'actualisation des ports",
     "SELECT_PORT_FIRST": "Veuillez d'abord choisir un port série",
     "SEND_FAILED": "Échec de l'envoi",
-    "SIGNAL_FAILED": "Échec du signal"
+    "SIGNAL_FAILED": "Échec du signal",
+    "AGENT_CANCELLED": "Opération de l’agent annulée",
+    "JOURNAL_RECORDING": "Enregistrement du journal",
+    "SCENARIO_RUNNING": "Scénario en cours",
+    "SCENARIO_COMPLETED": "Scénario terminé",
+    "ANALYSIS_RUNNING": "Analyse en cours",
+    "ANALYSIS_COMPLETED": "Analyse terminée",
+    "JOURNAL_SEARCH": "Rechercher dans le journal",
+    "JOURNAL_SEARCH_EMPTY": "Aucun résultat persistant"
   }
 }

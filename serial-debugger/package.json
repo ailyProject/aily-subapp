@@ -2,11 +2,34 @@
   "name": "@aily-project/subapp-serial-debugger",
   "version": "0.1.0",
   "private": true,
-  "description": "Serial debugger child tool backend for Aily Blockly",
+  "description": "Standalone Serial Debugger subapp Runtime for Aily-compatible hosts",
   "ailySubapp": {
     "app": {
       "icon": "fa-light fa-monitor-waveform",
       "enabled": true
+    },
+    "runtime": {
+      "startupTimeoutMs": 20000
+    },
+    "ui": {
+      "surfaces": {
+        "compact": {
+          "minWidth": 280,
+          "minHeight": 180,
+          "preferredHeight": 320,
+          "interactive": true
+        }
+      }
+    },
+    "agent": {
+      "protocolVersion": 1,
+      "skills": [
+        "skill/serial-device-debugger/SKILL.md"
+      ],
+      "tools": {
+        "transport": "aily-child-rpc",
+        "manifest": "agent/tools.json"
+      }
     }
   },
   "main": "index.js",
@@ -17,6 +40,9 @@
     "start": "node index.js rpc",
     "serve": "node index.js serve",
     "build:ui": "node scripts/build-ui.mjs",
+    "test": "node --test test/*.test.js",
+    "test:backend": "node --test test/*.test.js",
+    "test:stress": "node scripts/stress-large-log.mjs",
     "cli": "node index.js",
     "ports": "node index.js ports",
     "status": "node index.js status"

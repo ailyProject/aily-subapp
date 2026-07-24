@@ -1,0 +1,699 @@
+{
+  "protocolVersion": 1,
+  "transport": "aily-child-rpc",
+  "lifecycle": {
+    "sessionRelease": {
+      "method": "serial.session.close",
+      "params": {},
+      "timeoutMs": 5000
+    }
+  },
+  "tools": [
+    {
+      "name": "serial_ports_list",
+      "description": "List local serial ports and their USB identity metadata without changing device state.",
+      "rpc": {
+        "method": "serial.ports.list"
+      },
+      "permission": "read",
+      "requiresSession": false,
+      "supportsCancellation": false,
+      "timeoutMs": 15000,
+      "maxTimeoutMs": 30000,
+      "maxOutputBytes": 49152,
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "serial_session_manage",
+      "description": "Open, inspect, or close the shared Serial Debugger session. Opening reserves the port; always close before firmware upload and when the serial workflow finishes.",
+      "rpc": {
+        "actionParam": "action",
+        "methods": {
+          "open": "serial.session.open",
+          "status": "serial.session.status",
+          "close": "serial.session.close"
+        }
+      },
+      "presentation": {
+        "mode": "dock",
+        "surface": "compact",
+        "autoOpen": "first-active",
+        "when": {
+          "param": "action",
+          "values": [
+            "open"
+          ]
+        }
+      },
+      "permission": "change",
+      "requiresSession": false,
+      "supportsCancellation": true,
+      "timeoutMs": 30000,
+      "maxTimeoutMs": 60000,
+      "maxOutputBytes": 49152,
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "open",
+              "status",
+              "close"
+            ]
+          },
+          "portPath": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "baudRate": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 12000000,
+            "default": 115200
+          },
+          "dataBits": {
+            "type": "integer",
+            "enum": [
+              5,
+              6,
+              7,
+              8
+            ],
+            "default": 8
+          },
+          "stopBits": {
+            "type": "number",
+            "enum": [
+              1,
+              1.5,
+              2
+            ],
+            "default": 1
+          },
+          "parity": {
+            "type": "string",
+            "enum": [
+              "none",
+              "even",
+              "odd",
+              "mark",
+              "space"
+            ],
+            "default": "none"
+          },
+          "flowControl": {
+            "type": "string",
+            "enum": [
+              "none",
+              "hardware",
+              "software"
+            ],
+            "default": "none"
+          },
+          "presentUi": {
+            "type": "string",
+            "enum": [
+              "none",
+              "embedded",
+              "window"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "serial_transact",
+      "description": "Send text or HEX data through the active serial session, wait for an expected response, and return captured RX evidence with timing and event cursors.",
+      "rpc": {
+        "method": "serial.transact"
+      },
+      "permission": "change",
+      "requiresSession": true,
+      "supportsCancellation": true,
+      "timeoutMs": 5000,
+      "maxTimeoutMs": 120000,
+      "maxInputBytes": 1048576,
+      "maxOutputBytes": 49152,
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "send"
+        ],
+        "properties": {
+          "send": {
+            "type": "object",
+            "required": [
+              "mode",
+              "data"
+            ],
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "text",
+                  "hex"
+                ]
+              },
+              "data": {
+                "type": "string",
+                "maxLength": 1048576
+              },
+              "appendCr": {
+                "type": "boolean",
+                "default": false
+              },
+              "appendLf": {
+                "type": "boolean",
+                "default": false
+              }
+            },
+            "additionalProperties": false
+          },
+          "expect": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "any",
+                  "text",
+                  "regex",
+                  "hex",
+                  "line"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "pattern": {
+                "type": "string",
+                "maxLength": 500
+              },
+              "flags": {
+                "type": "string",
+                "maxLength": 8
+              }
+            },
+            "additionalProperties": false
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 120000,
+            "default": 3000
+          },
+          "quietMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 30000,
+            "default": 200
+          },
+          "maxBytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 16777216,
+            "default": 65536
+          },
+          "previewBytes": {
+            "type": "integer",
+            "minimum": 256,
+            "maximum": 8192,
+            "default": 2048
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "serial_logs_read",
+      "description": "Read a bounded page of ordered Serial Runtime events after a cursor for evidence review or UI replay.",
+      "rpc": {
+        "method": "serial.log.read"
+      },
+      "permission": "read",
+      "requiresSession": false,
+      "supportsCancellation": false,
+      "timeoutMs": 5000,
+      "maxTimeoutMs": 15000,
+      "maxOutputBytes": 49152,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "memory",
+              "journal"
+            ],
+            "default": "auto"
+          },
+          "afterSeq": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 0
+          },
+          "beforeSeq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "fromTimestamp": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "toTimestamp": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5000,
+            "default": 500
+          },
+          "maxBytes": {
+            "type": "integer",
+            "minimum": 1024,
+            "maximum": 32768,
+            "default": 32768
+          },
+          "previewBytes": {
+            "type": "integer",
+            "minimum": 256,
+            "maximum": 4096,
+            "default": 2048
+          },
+          "events": {
+            "type": "array",
+            "maxItems": 32,
+            "items": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          "directions": {
+            "type": "array",
+            "maxItems": 4,
+            "items": {
+              "type": "string",
+              "enum": [
+                "RX",
+                "TX",
+                "SYS"
+              ]
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "serial_artifact_read",
+      "description": "Read a bounded UTF-8 page from a Serial Runtime artifact by artifactId. Only registered runtime artifacts are accessible.",
+      "rpc": {
+        "method": "serial.artifact.read"
+      },
+      "permission": "read",
+      "requiresSession": false,
+      "supportsCancellation": false,
+      "timeoutMs": 5000,
+      "maxTimeoutMs": 15000,
+      "maxOutputBytes": 49152,
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "artifactId"
+        ],
+        "properties": {
+          "artifactId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 0
+          },
+          "maxBytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 32768,
+            "default": 32768
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "serial_artifact_search",
+      "description": "Search a registered Serial Runtime artifact and return bounded matching line previews without loading the whole file into the Agent context.",
+      "rpc": {
+        "method": "serial.artifact.search"
+      },
+      "permission": "read",
+      "requiresSession": false,
+      "supportsCancellation": false,
+      "timeoutMs": 15000,
+      "maxTimeoutMs": 30000,
+      "maxOutputBytes": 49152,
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "artifactId",
+          "query"
+        ],
+        "properties": {
+          "artifactId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "regex": {
+            "type": "boolean",
+            "default": false
+          },
+          "flags": {
+            "type": "string",
+            "maxLength": 8
+          },
+          "caseSensitive": {
+            "type": "boolean",
+            "default": false
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20
+          },
+          "maxScanBytes": {
+            "type": "integer",
+            "minimum": 1024,
+            "maximum": 16777216,
+            "default": 1048576
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "serial_scenario_run",
+      "description": "Run a bounded multi-step serial test scenario against the shared Runtime. Supports transact, send, capture, signal, and wait steps with structured per-step evidence.",
+      "rpc": {
+        "method": "serial.scenario.run"
+      },
+      "permission": "change",
+      "requiresSession": true,
+      "supportsCancellation": true,
+      "timeoutMs": 120000,
+      "maxTimeoutMs": 125000,
+      "maxInputBytes": 1048576,
+      "maxOutputBytes": 49152,
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "steps"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "stopOnFailure": {
+            "type": "boolean",
+            "default": true
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 120000,
+            "default": 120000
+          },
+          "steps": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "items": {
+              "type": "object",
+              "required": [
+                "action"
+              ],
+              "properties": {
+                "stepId": {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "transact",
+                    "send",
+                    "capture",
+                    "signal",
+                    "wait"
+                  ]
+                },
+                "send": {
+                  "type": "object",
+                  "required": [
+                    "mode",
+                    "data"
+                  ],
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "text",
+                        "hex"
+                      ]
+                    },
+                    "data": {
+                      "type": "string",
+                      "maxLength": 1048576
+                    },
+                    "appendCr": {
+                      "type": "boolean"
+                    },
+                    "appendLf": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "expect": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "any",
+                        "text",
+                        "regex",
+                        "hex",
+                        "line"
+                      ]
+                    },
+                    "value": {
+                      "type": "string",
+                      "maxLength": 4096
+                    },
+                    "pattern": {
+                      "type": "string",
+                      "maxLength": 500
+                    },
+                    "flags": {
+                      "type": "string",
+                      "maxLength": 8
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "timeoutMs": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 120000
+                },
+                "quietMs": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 30000
+                },
+                "maxBytes": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 16777216
+                },
+                "previewBytes": {
+                  "type": "integer",
+                  "minimum": 256,
+                  "maximum": 8192
+                },
+                "durationMs": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 120000
+                },
+                "waitMs": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 30000
+                },
+                "signal": {
+                  "type": "string",
+                  "enum": [
+                    "dtr",
+                    "rts",
+                    "brk"
+                  ]
+                },
+                "state": {
+                  "type": "boolean"
+                },
+                "dtr": {
+                  "type": "boolean"
+                },
+                "rts": {
+                  "type": "boolean"
+                },
+                "brk": {
+                  "type": "boolean"
+                },
+                "pulse": {
+                  "type": "boolean"
+                },
+                "activeState": {
+                  "type": "boolean"
+                },
+                "finalState": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "serial_scenario_control",
+      "description": "Inspect or control the active serial scenario. Pause is cooperative at a safe step boundary; takeover grants one client manual serial access; release leaves the scenario paused until resume; cancel aborts the current operation without closing the serial session.",
+      "rpc": {
+        "method": "serial.scenario.control"
+      },
+      "permission": "change",
+      "requiresSession": false,
+      "supportsCancellation": false,
+      "timeoutMs": 15000,
+      "maxTimeoutMs": 30000,
+      "maxOutputBytes": 49152,
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "status",
+              "pause",
+              "resume",
+              "takeover",
+              "release",
+              "cancel"
+            ]
+          },
+          "scenarioId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "serial_analysis_run",
+      "description": "Run bounded rule-based analysis over hot events or the persisted Journal and return findings with seq and artifact evidence.",
+      "rpc": {
+        "method": "serial.analysis.run"
+      },
+      "permission": "read",
+      "requiresSession": false,
+      "supportsCancellation": false,
+      "timeoutMs": 30000,
+      "maxTimeoutMs": 60000,
+      "maxOutputBytes": 49152,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "memory",
+              "journal"
+            ],
+            "default": "auto"
+          },
+          "afterSeq": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 0
+          },
+          "beforeSeq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "fromTimestamp": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "toTimestamp": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "maxEvents": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5000,
+            "default": 2000
+          },
+          "maxFindings": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ]
+}

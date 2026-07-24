@@ -7,6 +7,7 @@ const path = require('path');
 const { URL } = require('url');
 const { WebSocketServer, WebSocket } = require('ws');
 const { asError, createSerialDebuggerCore } = require('./core');
+const { SerialJournal } = require('./runtime/journal');
 
 const TOOL_ID = 'serial-debugger';
 const MIME_TYPES = {
@@ -165,6 +166,14 @@ function createRpcMessage(id, ok, result = {}, error = '') {
   return { id, ok, result, error };
 }
 
+function createRpcErrorMessage(id, error) {
+  return {
+    ...createRpcMessage(id, false, {}, asError(error)),
+    ...(error?.code ? { errorCode: String(error.code) } : {}),
+    ...(error?.details !== undefined ? { details: error.details } : {})
+  };
+}
+
 async function startSerialDebuggerServer(options = {}) {
   const host = options.host || '127.0.0.1';
   const port = Number.isFinite(Number(options.port)) ? Number(options.port) : 0;
@@ -173,6 +182,13 @@ async function startSerialDebuggerServer(options = {}) {
   const clients = new Set();
   let closing = false;
   let server;
+  const journal = options.journal === false
+    ? null
+    : options.journal || new SerialJournal({
+        rootDir: options.runtimeRoot,
+        sessionId: options.sessionId,
+        ...(options.journalOptions || {})
+      });
 
   const broadcast = message => {
     const text = JSON.stringify(message);
@@ -182,7 +198,11 @@ async function startSerialDebuggerServer(options = {}) {
   };
 
   const core = createSerialDebuggerCore({
-    sendEvent: (event, data = {}) => broadcast({ event, data })
+    ...(options.SerialPortClass ? { SerialPortClass: options.SerialPortClass } : {}),
+    ...(options.eventStoreOptions ? { eventStoreOptions: options.eventStoreOptions } : {}),
+    ...(options.runtimeLifecycle ? { runtimeLifecycle: options.runtimeLifecycle } : {}),
+    ...(journal ? { journal, sessionId: journal.sessionId } : {}),
+    sendEvent: (event, data = {}, envelope) => broadcast(envelope || { event, data })
   });
 
   const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 * 1024 });
@@ -206,26 +226,66 @@ async function startSerialDebuggerServer(options = {}) {
       }
       done();
     });
+    await options.onStopped?.();
   }
 
   async function handleRpc(socket, message) {
     const id = message.id;
     const method = message.method || message.action;
+    const activeRequests = socket.activeRequests;
+    if (message.context?.actor || message.context?.actorId) {
+      socket.clientContext = {
+        actor: String(message.context.actor || 'unknown'),
+        actorId: String(message.context.actorId || '')
+      };
+    }
+
+    if (method === 'runtime.request.cancel') {
+      const requestId = String(message.params?.requestId || '');
+      const activeRequest = activeRequests.get(requestId);
+      if (activeRequest) activeRequest.abort();
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify(createRpcMessage(id, true, {
+          requestId,
+          cancelled: Boolean(activeRequest)
+        })));
+      }
+      return;
+    }
+
+    const requestId = String(id ?? '');
+    const abortController = new AbortController();
+    if (requestId) activeRequests.set(requestId, abortController);
 
     try {
       const result = await core.executeAction({
         action: method,
-        params: message.params || message.data || {}
+        params: message.params || message.data || {},
+        context: {
+          ...(message.context || {}),
+          ...(requestId ? { requestId } : {})
+        },
+        signal: abortController.signal
       });
-      socket.send(JSON.stringify(createRpcMessage(id, true, result)));
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify(createRpcMessage(id, true, result)));
+      }
       if (method === 'shutdown') await stop();
     } catch (error) {
-      socket.send(JSON.stringify(createRpcMessage(id, false, {}, asError(error))));
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify(createRpcErrorMessage(id, error)));
+      }
+    } finally {
+      if (requestId && activeRequests.get(requestId) === abortController) {
+        activeRequests.delete(requestId);
+      }
     }
   }
 
   wss.on('connection', socket => {
     clients.add(socket);
+    socket.activeRequests = new Map();
+    socket.clientContext = null;
     socket.send(JSON.stringify({
       event: 'ready',
       data: {
@@ -246,6 +306,11 @@ async function startSerialDebuggerServer(options = {}) {
     });
 
     socket.on('close', () => {
+      for (const activeRequest of socket.activeRequests.values()) activeRequest.abort();
+      socket.activeRequests.clear();
+      if (socket.clientContext?.actor === 'ui') {
+        core.handleClientDisconnect?.(socket.clientContext);
+      }
       clients.delete(socket);
     });
   });

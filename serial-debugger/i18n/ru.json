@@ -56,6 +56,14 @@
     "PORTS_FAILED": "Не удалось обновить порты",
     "SELECT_PORT_FIRST": "Сначала выберите последовательный порт",
     "SEND_FAILED": "Ошибка отправки",
-    "SIGNAL_FAILED": "Ошибка сигнала"
+    "SIGNAL_FAILED": "Ошибка сигнала",
+    "AGENT_CANCELLED": "Операция агента отменена",
+    "JOURNAL_RECORDING": "Запись журнала",
+    "SCENARIO_RUNNING": "Сценарий выполняется",
+    "SCENARIO_COMPLETED": "Сценарий завершён",
+    "ANALYSIS_RUNNING": "Анализ выполняется",
+    "ANALYSIS_COMPLETED": "Анализ завершён",
+    "JOURNAL_SEARCH": "Поиск в журнале",
+    "JOURNAL_SEARCH_EMPTY": "Сохранённых совпадений нет"
   }
 }

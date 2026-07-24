@@ -1,3 +1,6 @@
+@if (isCompactSurface) {
+  <app-compact-surface />
+} @else {
 <main class="serial-monitor-shell" (click)="showPortList=false;showBaudList=false;showContextMenu=false">
   <div class="window-box" (click)="$event.stopPropagation()">
     <div class="main-box">
@@ -65,11 +68,73 @@
             type="button"
             class="switch-control"
             [class.on]="switchValue"
-            [disabled]="backendStatus !== 'ready' || connecting"
+            [disabled]="backendStatus !== 'ready' || connecting || !manualSerialControlAllowed"
             (click)="switchPort()"
           >
             <span></span>
           </button>
+          @if (agentControlled) {
+            <span class="agent-session-badge">
+              <span class="agent-pulse"></span>
+              {{ t('AGENT_CONTROLLED', 'Agent controlled') }}
+            </span>
+          }
+          @if (journalEnabled) {
+            <span
+              class="journal-session-badge"
+              [class.is-warning]="journalHealthState === 'low' || journalHealthState === 'unknown'"
+              [class.is-error]="journalHealthState === 'critical' || journalHealthState === 'error'"
+              [title]="journalHealthMessage || journalRoot"
+            >
+              <span class="journal-pulse"></span>
+              {{
+                journalHealthState === 'critical' || journalHealthState === 'error'
+                  ? t('JOURNAL_PAUSED', 'Journal paused')
+                  : journalHealthState === 'low'
+                    ? t('JOURNAL_LOW_DISK', 'Journal low disk')
+                    : t('JOURNAL_RECORDING', 'Journal recording')
+              }}
+            </span>
+          }
+          @if (scenarioActive || analysisRunning) {
+            <span class="automation-session-badge" [title]="scenarioStateLabel">
+              <span class="automation-pulse"></span>
+              @if (analysisRunning) {
+                {{ t('ANALYSIS_RUNNING', 'Analysis running') }}
+              } @else {
+                {{ t('SCENARIO_RUNNING', 'Scenario running') }} · {{ activeScenarioName }}
+              }
+            </span>
+            @if (scenarioActive) {
+              <span class="scenario-control-actions">
+                @if (scenarioState === 'running') {
+                  <button type="button" class="scenario-control-button" [disabled]="scenarioControlBusy" (click)="controlScenario('pause')">
+                    {{ t('SCENARIO_PAUSE', 'Pause') }}
+                  </button>
+                }
+                @if (scenarioState === 'paused' || scenarioState === 'running') {
+                  <button type="button" class="scenario-control-button takeover" [disabled]="scenarioControlBusy" (click)="controlScenario('takeover')">
+                    {{ t('SCENARIO_TAKEOVER', 'Take over') }}
+                  </button>
+                }
+                @if (scenarioState === 'pausing' || scenarioState === 'paused') {
+                  <button type="button" class="scenario-control-button" [disabled]="scenarioControlBusy" (click)="controlScenario('resume')">
+                    {{ t('SCENARIO_RESUME', 'Resume') }}
+                  </button>
+                }
+                @if (scenarioState === 'takeover_pending' || scenarioState === 'taken_over') {
+                  <button type="button" class="scenario-control-button" [disabled]="scenarioControlBusy" (click)="controlScenario('release')">
+                    {{ t('SCENARIO_RELEASE', 'Release') }}
+                  </button>
+                }
+                @if (scenarioState !== 'cancelling') {
+                  <button type="button" class="scenario-control-button danger" [disabled]="scenarioControlBusy" (click)="controlScenario('cancel')">
+                    {{ t('SCENARIO_CANCEL', 'Cancel') }}
+                  </button>
+                }
+              </span>
+            }
+          }
         </div>
       </section>
 
@@ -142,6 +207,9 @@
                 >
                   <span class="time">{{ item.time }}</span>
                   <span class="dir" [class.tx]="item.dir === 'TX'" [class.sys]="item.dir === 'SYS'">{{ item.dir }}</span>
+                  @if (item.actor === 'agent') {
+                    <span class="agent-event-badge">AGENT</span>
+                  }
                   <span
                     class="data vsfont"
                     [class.tx]="item.dir === 'TX'"
@@ -180,10 +248,31 @@
 
           @if (showSearchBox) {
             <div class="search-box" (click)="$event.stopPropagation()">
-              <input type="text" placeholder="search keyword" [(ngModel)]="searchKeyword" (ngModelChange)="keywordChange($event)">
+              <input type="text" [placeholder]="t('SEARCH', 'Search')" [(ngModel)]="searchKeyword" (ngModelChange)="keywordChange($event)">
               <span class="result-count">{{ filteredSearchStatus }}</span>
               <button type="button" [disabled]="!searchResults.length" (click)="navigatePrev()">⌃</button>
               <button type="button" [disabled]="!searchResults.length" (click)="navigateNext()">⌄</button>
+              <button
+                type="button"
+                class="journal-search-button"
+                [disabled]="!searchKeyword.trim() || persistedSearchLoading || !journalEnabled"
+                (click)="searchPersistedHistory()"
+              >
+                {{ persistedSearchLoading ? '…' : t('JOURNAL_SEARCH', 'Journal') }}
+              </button>
+              @if (persistedSearchResults.length || persistedSearchError) {
+                <div class="persisted-search-results sscroll">
+                  @if (persistedSearchError) {
+                    <div class="persisted-search-empty">{{ persistedSearchError }}</div>
+                  }
+                  @for (match of persistedSearchResults; track match.artifactId + ':' + match.offset) {
+                    <button type="button" class="persisted-search-match" (click)="selectPersistedSearchResult(match)">
+                      <strong>{{ match.artifactId }}:{{ match.line }}</strong>
+                      <span>{{ match.text }}{{ match.truncated ? '…' : '' }}</span>
+                    </button>
+                  }
+                </div>
+              }
             </div>
           }
         </div>
@@ -197,7 +286,7 @@
               <div class="quick-scroll">
                 <div class="quick-title">{{ t('QUICK_SEND', 'Quick Send') }}</div>
                 @for (item of quickSendList; track $index) {
-                  <button type="button" class="item-btn ccenter" [class.signal]="item.type === 'signal'" [class.text]="item.type === 'text'" [class.hex]="item.type === 'hex'" (click)="sendQuick(item)">
+                  <button type="button" class="item-btn ccenter" [disabled]="!manualSerialControlAllowed" [class.signal]="item.type === 'signal'" [class.text]="item.type === 'text'" [class.hex]="item.type === 'hex'" (click)="sendQuick(item)">
                     {{ item.name }}
                   </button>
                 }
@@ -209,7 +298,7 @@
           </section>
 
           <div class="input-box">
-            <textarea class="sscroll vsfont" [(ngModel)]="inputValue" (keydown)="onKeyDown($event)"></textarea>
+            <textarea class="sscroll vsfont" [disabled]="!manualSerialControlAllowed" [(ngModel)]="inputValue" (keydown)="onKeyDown($event)"></textarea>
             <div class="btns">
               <button type="button" class="btn ccenter hex" [title]="t('HEX_INPUT', 'Hex')" (click)="changeInputMode('hexMode')" [class.actived]="inputMode.hexMode">
                 <span class="rect-icon"></span><span class="hex-label">Hex</span>
@@ -247,3 +336,4 @@
     </div>
   }
 </main>
+}

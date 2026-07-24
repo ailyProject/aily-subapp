@@ -56,6 +56,14 @@
     "PORTS_FAILED": "فشل تحديث المنافذ",
     "SELECT_PORT_FIRST": "يرجى اختيار منفذ تسلسلي أولا",
     "SEND_FAILED": "فشل الإرسال",
-    "SIGNAL_FAILED": "فشل الإشارة"
+    "SIGNAL_FAILED": "فشل الإشارة",
+    "AGENT_CANCELLED": "تم إلغاء عملية الوكيل",
+    "JOURNAL_RECORDING": "تسجيل السجل",
+    "SCENARIO_RUNNING": "السيناريو قيد التشغيل",
+    "SCENARIO_COMPLETED": "اكتمل السيناريو",
+    "ANALYSIS_RUNNING": "التحليل قيد التشغيل",
+    "ANALYSIS_COMPLETED": "اكتمل التحليل",
+    "JOURNAL_SEARCH": "البحث في السجل",
+    "JOURNAL_SEARCH_EMPTY": "لا توجد نتائج محفوظة"
   }
 }

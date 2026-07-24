@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const nodeTarget = 'node18';
-const assetDirs = ['ui', 'i18n', 'assets', 'skill'];
+const assetDirs = ['ui', 'i18n', 'assets', 'skill', 'agent'];
 const vendorFiles = [
   {
     from: ['node_modules', 'penpal', 'dist', 'penpal.min.js'],
@@ -196,7 +196,7 @@ function rewriteDistPackageJson(project) {
       : {}),
     main: 'index.js',
     bin: packageJson.bin,
-    files: ['index.js', 'ui', 'i18n', 'assets', 'skill', 'vendor'],
+    files: ['index.js', 'ui', 'i18n', 'assets', 'skill', 'agent', 'vendor'],
     scripts: runtimeScripts,
     ...(packageJson.name?.startsWith('@')
       ? { publishConfig: { access: 'restricted' } }

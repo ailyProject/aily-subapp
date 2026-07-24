@@ -57,6 +57,35 @@
     "PORTS_FAILED": "刷新串口失败",
     "SELECT_PORT_FIRST": "请先选择串口",
     "SEND_FAILED": "发送失败",
-    "SIGNAL_FAILED": "信号切换失败"
+    "SIGNAL_FAILED": "信号切换失败",
+    "AGENT_CONTROLLED": "Agent 正在控制",
+    "AGENT_WAITING": "Agent 正在等待",
+    "AGENT_MATCHED": "Agent 已匹配响应",
+    "AGENT_STEP_FAILED": "Agent 串口事务失败",
+    "AGENT_CANCELLED": "Agent 操作已取消",
+    "SERIAL_RESPONSE": "串口响应",
+    "RUNTIME_RESTARTED": "串口运行时已重启",
+    "JOURNAL_RECORDING": "日志持久记录中",
+    "SCENARIO_RUNNING": "场景运行中",
+    "SCENARIO_COMPLETED": "场景已完成",
+    "ANALYSIS_RUNNING": "分析运行中",
+    "ANALYSIS_COMPLETED": "分析已完成",
+    "JOURNAL_SEARCH": "搜索持久日志",
+    "JOURNAL_SEARCH_EMPTY": "持久日志中没有匹配项"
+    ,"SCENARIO_PAUSE": "暂停"
+    ,"SCENARIO_PAUSING": "正在等待安全边界"
+    ,"SCENARIO_PAUSED": "场景已暂停"
+    ,"SCENARIO_RESUME": "恢复"
+    ,"SCENARIO_RESUMED": "场景已恢复"
+    ,"SCENARIO_TAKEOVER": "手动接管"
+    ,"SCENARIO_TAKEOVER_PENDING": "等待手动接管"
+    ,"SCENARIO_TAKEN_OVER": "已获得手动控制"
+    ,"SCENARIO_TAKEN_OVER_OTHER": "其他客户端正在控制"
+    ,"SCENARIO_RELEASE": "释放"
+    ,"SCENARIO_TAKEOVER_RELEASED": "已释放手动控制"
+    ,"SCENARIO_CANCEL": "取消"
+    ,"SCENARIO_CANCELLING": "正在取消"
+    ,"SCENARIO_CONTROL_REQUIRED": "请先接管活动场景，再执行手动串口操作"
+    ,"SCENARIO_CONTROL_FAILED": "场景控制失败"
   }
 }
